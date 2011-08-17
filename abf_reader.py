@@ -1,5 +1,3 @@
-#################### THIS SHIT IS BROKEN!!! ####################
-# want to read the header into a structure, right from file, not a dictionary.
 import pdb
 import os
 import numpy as np
@@ -8,8 +6,6 @@ from tempfile import mkdtemp
 class abf_header():
     from abf_header_dtype import abf_header_dtype
     _headr_struct = abf_header_dtype
-
-# thinking about adding a base class, for abf data - this class would always assosiate a file name with what ever data it contains, and ideally a cell name too
 
 class abf_reader(object, abf_header):
     def __init__(self, fname):
@@ -245,10 +241,9 @@ class abf_reader(object, abf_header):
         adc_l = map(lambda read: 'adc_' + str(read), np.r_[0:16])
         chans = self.header['multi-chan_inf']['sADCChannelName'][0]
         sampled_chans = self._read_seq()
-        #these list of sampled chans is in the order it was sampled, sort for readability
-        sampled_chans.sort()
-        for sampled_chan in sampled_chans:
-            print '%-8s' '%-10s' '%-10s' %(adc_l[sampled_chan], '-'*8, chans[sampled_chan])
+        #these list of sampled chans is in the order it was sampled
+        for num, sampled_chan in enumerate(sampled_chans):
+            print '%-3s' '%-3s' '%-8s' '%-10s' '%-10s' %(num, '-'*3, adc_l[sampled_chan], '-'*8, chans[sampled_chan])
 
 class abf_episode:
 
