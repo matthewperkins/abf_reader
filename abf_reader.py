@@ -19,6 +19,7 @@ class abf_reader(object, abf_header):
         self.fid = file(self.path_file, 'rb')
         self.read_header()
         self.addGain()
+        self._chan_holder = -1
 
     def read_header(self):
         import numpy as np
@@ -29,8 +30,45 @@ class abf_reader(object, abf_header):
         return filter(lambda read: \
             read != -1, self.header['multi-chan_inf']['nADCSamplingSeq'][0])
 
+    def next_chan(self):
+        self._chan_holder += 1
+        if self._chan_holder > self.num_chans()-1:
+            raise StopIteration
+        return self._chan_holder
+
     def num_chans(self):
-        return len(self._read_seq(self))
+        return len(self._read_seq())
+
+    def get_chan_name(self, grep_str):
+        import re
+        prog = re.compile(grep_str, flags = re.I)
+        try:
+            while True:
+                chan_indx = self.next_chan()
+                chan_name = self.chan_name(chan_indx)
+                result = prog.search(chan_name)
+                if (result):
+                    return chan_indx
+        except StopIteration:
+            return 'name not found'
+
+    def chan_names(self):
+        import numpy as np
+        adc_l = map(lambda read: 'adc_' + str(read), np.r_[0:16])
+        chans = self.header['multi-chan_inf']['sADCChannelName'][0]
+        sampled_chans = self._read_seq()
+        #these list of sampled chans is in the order it was sampled
+        for num, sampled_chan in enumerate(sampled_chans):
+            print '%-3s' '%-3s' '%-8s' '%-10s' '%-10s' %(num, '-'*3,
+                                                         adc_l[sampled_chan],
+                                                         '-'*8, chans[sampled_chan])
+
+    def chan_name(self, chan_no=0):
+        import numpy as np
+        chans = self.header['multi-chan_inf']['sADCChannelName'][0]
+        sampled_chans = self._read_seq()
+        #rstrip removes the trailing white space
+        return chans[sampled_chans[chan_no]].rstrip()
 
     def read_data(self):
         '''reads multiplexed data from abfs into an array'''
@@ -47,20 +85,32 @@ class abf_reader(object, abf_header):
         ncols = len(read_seq)
         nrows = total_aq/numchans
         reads = map(lambda read: 'adc_' + str(read), read_seq)
-        if self.header['f_structure']['nDataFormat'][0]==1: #float data
+
+        #see if is float data
+        if self.header['f_structure']['nDataFormat'][0]==1: 
             data = memmap(self.fid, dtype = float32, shape = (nrows,ncols), offset = offset)
+
+        #see if is integer data
         elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
             data = memmap(self.fid, dtype = int16, shape = (nrows,ncols), mode = 'r',offset = offset)
+
         # make a writeable temporarory memory map for helping? with memusage?,
         tmp_dir = mkdtemp()
         tmp_map_name = os.path.join(tmp_dir, '_tmp_' + self.fname.split(os.extsep)[0])
         self.mm = memmap(tmp_map_name, dtype = float32, shape = (nrows,ncols), mode = 'w+')
         self.mm[:] = data[:].astype(np.float32)
+
         # delete the memory map to flush from file
         del self.mm
+
         # then reload?
         self.mm = memmap(tmp_map_name, dtype = float32, shape = (nrows,ncols), mode = 'r+')
+
         # now do some scaling
+        self.mm = self.scale_int_data(self.mm)
+        return self.mm
+
+    def scale_int_data(self, data):
         for indx, chan in enumerate(self._read_seq()):
             divis = (self.header['multi-chan_inf']['fInstrumentScaleFactor'][0][chan] * \
                      self.header['multi-chan_inf']['fSignalGain'][0][chan] * \
@@ -70,12 +120,8 @@ class abf_reader(object, abf_header):
                    / self.header['hardware_inf']['lADCResolution'][0]
             offs = self.header['multi-chan_inf']['fInstrumentOffset'][0][chan] - \
                    self.header['multi-chan_inf']['fSignalOffset'][0][chan]
-            self.mm[:,indx] = self.mm[:,indx] / divis * mult + offs
-        return self.mm
-        # inorder to plot this with out decimating data, I will have to
-        # 'paginate' this into mutliple files, and then stitch them I should
-        # be able to decimate, aswell, especially with data sampled around
-        # 10k, with out much affect on appearance also, right now this is
+            data[:,indx] = data[:,indx] / divis * mult + offs
+        return data
 
     def addGain(self):
         '''method helps with scaling'''
@@ -129,12 +175,10 @@ class abf_reader(object, abf_header):
           1 * 1000000\
           /self.header['trial_hierarchy']['fADCSampleInterval']\
           /self.header['trial_hierarchy']['nADCNumChannels']
-          return self._sample_rate
+          return self._sample_rate[0]
 
     def waveforms_from_header(self):
         import numpy as np
-
-        
 
     def epochs_from_header(self):
         # have to figure out how to deal with active vs. inactive
@@ -148,25 +192,26 @@ class abf_reader(object, abf_header):
         #but for now:
         self.epochs = []
         
-
-        #make var for part of header I am pulling the epoch definitions from for
-        #readibility
+        #for readibility
         eewp = self.header['ext_epoch_waveform_pulses']
 
-        #get the number of epochs, by using the type defintions. There are 10
-        #possible epochs, those whos type is not zero are actually
-        #defined/inuse, not sure if I should use the first [0][0] or the
-        #second [0][1] block of the epoch definition, seems to depend on the file.
         self._actv_wv = np.nonzero(eewp['nWaveformEnable'][0])[0]
         if len(self._actv_wv)>1:
             raise IndexError('this is currently not ready to handle to active waveforms')
         else:
             self._actv_wv = self._actv_wv[0]
+
+        #get the number of epochs, by using the type. There are 10
+        #possible epochs, those whos type is not zero are actually
+        #defined/inuse
         self._num_epochs = np.nonzero(eewp['nEpochType'][0][self._actv_wv])[0].size
 
-        # files are longer than protocol for some reason, here is a kludge to
-        # get the indexes of each epoch correct, note that I am using the
-        # extended epoch wavefrom pulses portion of the header
+        # more data are recorded than the num data points defined in
+        # the epochs.
+
+        # Here is a kludge to get the indexes of each
+        # epoch correct, note that I am using the extended epoch
+        # wavefrom pulses portion of the header
         try:
             self._dp_pad
         except AttributeError:
@@ -175,16 +220,9 @@ class abf_reader(object, abf_header):
         tmp_dp_counter = 0
         tmp_dp_counter += self._dp_lpad
 
-        #iterate over number of epochs
+        # Make an epoch object for each epoch.
+        # At the moment only support abfs with a single active waveform
         for epoch in range(self._num_epochs):
-            #there is something funny going on with epoch and abf_waveforms, i
-            #don't really understand, but to get the data point index for the
-            #start of an epoch, I need to use the epoch definitions in the
-            #extended epoch epoch waveform pulses section of the header?  this
-            #extended header has two of everything, (hence the
-            #[0][0][epoch_num] indexing), i guess bc there are two DAC
-            #channels that support waveforms?
-
             tmp_epoch_level_init = eewp['fEpochInitLevel'][0]\
                 [self._actv_wv][epoch]
             tmp_epoch_dur_init = eewp['lEpochInitDuration'][0]\
@@ -195,7 +233,6 @@ class abf_reader(object, abf_header):
                 [self._actv_wv][epoch]
             tmp_epoch_dur_incrm = eewp['lEpochDurationInc'][0]\
                 [self._actv_wv][epoch]
-            pdb.set_trace()
             tmp_epoch = abf_epoch(tmp_epoch_level_init,
                           tmp_epoch_dur_init, tmp_epoch_type,
                                   tmp_dp_counter, self,
@@ -216,17 +253,6 @@ class abf_reader(object, abf_header):
             tmp_episode = abf_episode(self._episode_len * episode, episode)
             self.episodes.append( tmp_episode )
         self.episodes = np.array(self.episodes)
-
-    def lp_filter(self, hertz):
-        import mpLOWPASS
-        try:
-            self.data
-            if not len(self.data.shape)==1:
-                self.read_data()
-        except AttributeError:
-            self.read_data()
-        for name in self.data.dtype.names:
-            self.data[name] = mpLOWPASS.mpLOWPASS(self.data[name], hertz, self.sample_rate())
 
     def episode_data(self):
         '''reshape continous data into composite episodes, right now incrementing episode/epoch lengths are not supported'''
@@ -262,31 +288,6 @@ class abf_reader(object, abf_header):
                                       t_d['hour'],t_d['minute'],\
                                       t_d['second'],t_d['microsecond'])
             return self._file_start_time
-
-    def eert_data(self, epoch = 0, episode = 0, run = 0, trail = 0):
-        ''' method returns slices of data cooresponding to the designated Epoch Episode Trial Run ### runs and trail are not implemented now'''
-        self.episodes_from_header()
-        self.epochs_from_header()
-        self.episode_data()
-        epch_start = self.epochs[epoch]._dp_start
-        epch_end = epch_start + self.epochs[epoch]._dur
-        return self.mm[episode,epch_start:epch_end,:]
-
-    def chan_names(self):
-        import numpy as np
-        adc_l = map(lambda read: 'adc_' + str(read), np.r_[0:16])
-        chans = self.header['multi-chan_inf']['sADCChannelName'][0]
-        sampled_chans = self._read_seq()
-        #these list of sampled chans is in the order it was sampled
-        for num, sampled_chan in enumerate(sampled_chans):
-            print '%-3s' '%-3s' '%-8s' '%-10s' '%-10s' %(num, '-'*3, adc_l[sampled_chan], '-'*8, chans[sampled_chan])
-
-    def chan_name(self, chan_no=0):
-        import numpy as np
-        chans = self.header['multi-chan_inf']['sADCChannelName'][0]
-        sampled_chans = self._read_seq()
-        #rstrip removes the trailing white space
-        return chans[sampled_chans[chan_no]].rstrip()
 
 class abf_episode:
 
@@ -351,40 +352,4 @@ class abf_epoch:
         ########## for now, just right this for non- incrementing durations -
         ########## add later if needed
 
-class abf_waveform:
-    # data structure is modified from abf_header_dtype, made singular:
-    from abf_header_defs import ABF_EPOCHCOUNT
-    dtype = np.dtype([\
-        ('nWaveformEnable', np.int16),
-        ('nWaveformSource', np.int16),
-        ('nInterEpisodeLevel', np.int16),
-        ('nEpochType', np.int16, ABF_EPOCHCOUNT),
-        ('fEpochInitLevel', np.float32, ABF_EPOCHCOUNT),
-        ('fEpochLevelInc', np.float32, ABF_EPOCHCOUNT),
-        ('lEpochInitDuration', np.int32, ABF_EPOCHCOUNT),
-        ('lEpochDurationInc', np.int32, ABF_EPOCHCOUNT),
-        ('nDigitalTrainValue', np.int16, ABF_EPOCHCOUNT), ## 2 * 10 = 20 bytes
-        ('nDigitalTrainActiveLogic', np.int16),   ## 2 bytes
-        ('sUnused012', np.str_, 18)
-        ])
-
-    def __init__(self):
-         self._data = np.zeros(1, dtype = self.dtype)
-    
-    def _from_header(self, abf_reader, which = 0):
-         eewp = abf_reader.header['ext_epoch_waveform_pulses']
-         for name in eewp.dtype.names:
-             # most of these fields are duped for each waveform
-             try:
-                 self._data[name] = eewp[name][0][which]
-             except IndexError:
-                 # except nDigitalTrainActiveLogic
-                 self._data[name] = eewp[name][0]
-
-
-    # def __call__(self, episodes_slice = slice(0,9999)):
-    #     return_list = []
-    #     for episode_indx in range(num_episodes)[episodes_slice]:
-    #         for 
-            
                      
