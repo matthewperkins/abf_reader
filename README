@@ -1,0 +1,5 @@
+For reading axon binary files into python, this only works for ABF
+1.8! And does not use any of the dll's that axon provides, but frankly
+it does not work very well.
+
+I slapped an MIT license on this, so there RMS!
