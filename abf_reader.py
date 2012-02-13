@@ -3,16 +3,10 @@ import os
 import numpy as np
 from tempfile import mkdtemp
 
-class abf_header():
-    from abf_header_dtype import abf_header_dtype
-    _headr_struct = abf_header_dtype
-
-class abf_reader(object, abf_header):
+class abf_reader(object):
     def __init__(self, fname):
-        import abf_header_defs as defs
-        self.defs = defs
-        import os
-        import numpy as np
+        from abf_header_dtype import abf_header_dtype
+        self._headr_struct = abf_header_dtype
         self.fname = os.path.basename(fname)
         self.path = os.path.dirname(os.path.abspath(fname))
         self.path_file = self.path + os.sep + self.fname
@@ -21,8 +15,20 @@ class abf_reader(object, abf_header):
         self.addGain()
         self._chan_holder = -1
 
+    # custom get and set state allow pickle to handel the pickleing of
+    # object with out choking on file
+        
+    def __getstate__(self):
+        odict = self.__dict__.copy() # copy the dict since we change it
+        del odict['fid']              # remove filehandle entry
+        if 'mm' in odict.keys(): del odict['mm']  # clear memorym when serializing
+        return odict
+
+    def __setstate__(self, dict):
+        path_file = dict['path_file']
+        self.fid = file(path_file, 'rb')
+
     def read_header(self):
-        import numpy as np
         self.fid.seek(0)
         self.header = np.fromfile(self.fid, self._headr_struct, 1)
 
@@ -40,8 +46,8 @@ class abf_reader(object, abf_header):
         return len(self._read_seq())
 
     def get_chan_name(self, grep_str):
-        import re
-        prog = re.compile(grep_str, flags = re.I)
+        from re import compile as recomp
+        prog = recomp(grep_str, flags = re.I)
         try:
             while True:
                 chan_indx = self.next_chan()
@@ -53,7 +59,6 @@ class abf_reader(object, abf_header):
             return 'name not found'
 
     def chan_names(self):
-        import numpy as np
         adc_l = map(lambda read: 'adc_' + str(read), np.r_[0:16])
         chans = self.header['multi-chan_inf']['sADCChannelName'][0]
         sampled_chans = self._read_seq()
@@ -64,7 +69,6 @@ class abf_reader(object, abf_header):
                                                          '-'*8, chans[sampled_chan])
 
     def chan_name(self, chan_no=0):
-        import numpy as np
         chans = self.header['multi-chan_inf']['sADCChannelName'][0]
         sampled_chans = self._read_seq()
         #rstrip removes the trailing white space
@@ -76,7 +80,8 @@ class abf_reader(object, abf_header):
         ## have to use data from the header to do this
         ## the times that are asso with discontinuous recording are wonky
         from numpy import fromfile, float32, int16, memmap, float
-        offset = self.header['f_structure']['lDataSectionPtr'] * self.defs.ABF_BLOCKSIZE
+        from abf_header_defs import ABF_BLOCKSIZE
+        offset = self.header['f_structure']['lDataSectionPtr'] * ABF_BLOCKSIZE
         total_aq = self.header['fid_size_info']['lActualAcqLength'][0]
         numchans = self.header['trial_hierarchy']['nADCNumChannels'][0]
         howmanyreads = self.header['trial_hierarchy']['lNumSamplesPerEpisode'][0] \
@@ -129,14 +134,13 @@ class abf_reader(object, abf_header):
         self.addGain = np.where(self.addGain==0, 1, self.addGain)
 
     def get_synch_array(self):
-        import numpy as np
-        self.fid.seek(self.header['f_structure']['lSynchArrayPtr'][0]*self.defs.ABF_BLOCKSIZE)
+        from abf_header_defs import ABF_BLOCKSIZE
+        self.fid.seek(self.header['f_structure']['lSynchArrayPtr'][0] * ABF_BLOCKSIZE)
         synch_array_dtype = [('start', np.int32), ('length', np.int32)]
         synch_array = np.fromfile(self.fid, synch_array_dtype, self.header['f_structure']['lSynchArraySize'])
         return synch_array
 
     def get_dp_pad(self):
-        import numpy as np
         #the total number of data points aquired minus the number of
         #data points defined in the epochs gives the padding data in
         #the file, half of this pad is at the beginning of the file,
@@ -177,14 +181,10 @@ class abf_reader(object, abf_header):
           /self.header['trial_hierarchy']['nADCNumChannels']
           return self._sample_rate[0]
 
-    def waveforms_from_header(self):
-        import numpy as np
-
     def epochs_from_header(self):
         # have to figure out how to deal with active vs. inactive
         # epochs might be glued together in an object, a 'constructed waveform',
 
-        import numpy as np
         self.episodes_from_header()
         
         #eventually, create an two item list of lists: each sublist
@@ -243,7 +243,6 @@ class abf_reader(object, abf_header):
 
     def episodes_from_header(self):
         '''This creates episodes, but i think episodes composed of epochs with increasing or decreasung durations will break this'''
-        import numpy as np
         self.episodes = []
         t_h = self.header['trial_hierarchy']
         self._episode_len = t_h['lNumSamplesPerEpisode'] /\
@@ -265,7 +264,7 @@ class abf_reader(object, abf_header):
         try:
             return self._file_start_time
         except AttributeError:
-            import datetime
+            from datetime import datetime
             self._File_Time = {}
             yyyymmdd = str(self.header['fid_size_info']['lFileStartDate'][0])
             self._File_Time['year'] = int(yyyymmdd[0:4])
@@ -283,7 +282,7 @@ class abf_reader(object, abf_header):
 
             #for reading self._File_Time = t_d
             t_d = self._File_Time
-            self._file_start_time = datetime.datetime(t_d['year'],\
+            self._file_start_time = datetime(t_d['year'],\
                                       t_d['month'] , t_d['day'],\
                                       t_d['hour'],t_d['minute'],\
                                       t_d['second'],t_d['microsecond'])
