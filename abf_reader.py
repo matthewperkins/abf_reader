@@ -3,6 +3,194 @@ import os
 import numpy as np
 from tempfile import mkdtemp
 
+# I have to decide if I want to use relative or absolute indxs I think
+# I should use absolute?  waveform should be generic, having the
+# signatures of a generic data source.
+
+# I think I am going to make this class only for deriving
+class waveform(object):
+    def __init__(self, **kwds):
+        # I think I should make the start index absolute, to the abf file.
+        self._start_indx = 0
+        self._end_indx = 0
+        self._len = 0
+        super(waveform, self).__init__(**kwds)
+
+    def __call__(self):
+        pass
+
+class epoch(waveform):
+    def __init__(self, data, **kwds):
+        # I think I should make the start index absolute, to the abf file.
+        self._data = data
+        super(epoch, self).__init__(**kwds)
+        self._start_indx = 0
+        self._end_indx = len(data)
+        self._len = len(data)
+
+    def __call__(self):
+        return self._data
+
+class waveform_collection(waveform):
+    def __init__(self, list_of_waveforms, **kwds):
+
+        # init super first so don't write over self._len
+        super(waveform, self).__init__(**kwds)
+        self.waveforms = list_of_waveforms
+
+        # make sure each item is list is either wavefrom or
+        # waveform_collection type
+        for wvf in self.waveforms:
+            assert(issubclass(type(wvf),waveform))
+        
+        # preindex the waveform length
+        self._len = 0
+        for wvf in self.waveforms:
+            self._len += len(wvf())
+
+    def next(self):
+        try:
+            self._current_waveform += 1
+            if (self._current_waveform+1>len(self.waveforms)):
+                raise StopIteration            
+        except AttributeError:
+            self._current_waveform = 0
+        return (self.waveforms[self._current_waveform])
+
+    def _rewind(self):
+        self._current_waveform = -1
+
+    def __call__(self):
+        from numpy import zeros
+        out_data = np.zeros(self._len)
+        plc_hldr = 0
+
+        # have to rewind _current_waveform here
+        self._rewind()
+        while True:
+            try:
+                wvf = self.next()
+                td = wvf()
+                out_data[plc_hldr:(plc_hldr+len(td))] = td
+                plc_hldr += len(td)
+            except StopIteration:
+                return out_data
+    
+class eert(object):
+    def __init__(self, abf_reader, **kwds):
+        self._abr = abf_reader
+        parse_header(self)
+        super(eert, self).__init__(**kwds)
+
+    def parse_header(self):
+        return
+
+    def get_dp_pad(self, waveform = 0):
+        '''get dp_pad for the designated  waveform'''
+        #the total number of data points aquired minus the number of
+        #data points defined in the epochs gives the padding data in
+        #the file, half of this pad is at the beginning of the file,
+        #and half at the end
+
+        #because epochs can be defined as off, meaning no data are
+        #aquired, have to filter epochs by epoch type != 0, meaning
+        #data are aquired.
+        if ( (waveform < 0) | (waveform > 1)):
+            raise IndexError('waveform must be 0 or 1')
+        self._actv_wv = \
+            np.nonzero(self._abr.header['ext_epoch_waveform_pulses']\
+                           ['nWaveformEnable'][0, waveform])[0]
+        dp_in_epochs = self._abr.header['ext_epoch_waveform_pulses']\
+                     ['lEpochInitDuration'][0][self._actv_wv].sum()
+
+        #this is the subtraction
+        self._dp_pad =\
+        (self._abr.header['trial_hierarchy']['lNumSamplesPerEpisode'][0] \
+        / self._abr.header['trial_hierarchy']['nADCNumChannels'][0]) \
+        - dp_in_epochs
+        #half of this space added before the epoch, and half after, so
+        #compute the left pad for convience
+        self._dp_lpad = self._dp_pad / 2
+
+    def epochs_from_header(self):
+        # have to figure out how to deal with active vs. inactive
+        # epochs might be glued together in an object, a 'constructed waveform',
+
+        self.episodes_from_header()
+        
+        #eventually, create an two item list of lists: each sublist
+        #will be a list of epoch objects
+        #but for now:
+        self.epochs = []
+        
+        #for readibility
+        eewp = self.header['ext_epoch_waveform_pulses']
+
+        self._actv_wv = np.nonzero(eewp['nWaveformEnable'][0])[0]
+        if len(self._actv_wv)>1:
+            raise IndexError('this is currently not ready to handle to active waveforms')
+        else:
+            self._actv_wv = self._actv_wv[0]
+
+        #get the number of epochs, by using the type. There are 10
+        #possible epochs, those whos type is not zero are actually
+        #defined/inuse
+        self._num_epochs = np.nonzero(eewp['nEpochType'][0][self._actv_wv])[0].size
+
+        # more data are recorded than the num data points defined in
+        # the epochs.
+
+        # Here is a kludge to get the indexes of each
+        # epoch correct, note that I am using the extended epoch
+        # wavefrom pulses portion of the header
+        try:
+            self._dp_pad
+        except AttributeError:
+            self.get_dp_pad()
+
+        tmp_dp_counter = 0
+        tmp_dp_counter += self._dp_lpad
+
+        # Make an epoch object for each epoch.
+        # At the moment only support abfs with a single active waveform
+        for epoch in range(self._num_epochs):
+            tmp_epoch_level_init = eewp['fEpochInitLevel'][0]\
+                [self._actv_wv][epoch]
+            tmp_epoch_dur_init = eewp['lEpochInitDuration'][0]\
+                [self._actv_wv][epoch]
+            tmp_epoch_type = eewp['nEpochType'][0]\
+                [self._actv_wv][epoch]
+            tmp_epoch_level_incrm = eewp['fEpochLevelInc'][0]\
+                [self._actv_wv][epoch]
+            tmp_epoch_dur_incrm = eewp['lEpochDurationInc'][0]\
+                [self._actv_wv][epoch]
+            tmp_epoch = abf_epoch(tmp_epoch_level_init,
+                          tmp_epoch_dur_init, tmp_epoch_type,
+                                  tmp_dp_counter, self,
+                                  tmp_epoch_level_incrm,
+                                  tmp_epoch_dur_init)
+            tmp_dp_counter += tmp_epoch_dur_init
+            self.epochs.append(tmp_epoch)
+
+    def episodes_from_header(self):
+        '''This creates episodes, but i think episodes composed of epochs with increasing or decreasung durations will break this'''
+        self.episodes = []
+        t_h = self.header['trial_hierarchy']
+        self._episode_len = t_h['lNumSamplesPerEpisode'] /\
+            t_h['nADCNumChannels']
+        self._num_episodes = t_h['lEpisodesPerRun']
+        for episode in range(self._num_episodes):
+            tmp_episode = abf_episode(self._episode_len * episode, episode)
+            self.episodes.append( tmp_episode )
+        self.episodes = np.array(self.episodes)
+
+    def episode_data(self):
+        '''reshape continous data into composite episodes, right now incrementing episode/epoch lengths are not supported'''
+        self.episodes_from_header()
+        self.read_data()
+        self.mm = self.mm.reshape((self._num_episodes, self._episode_len, self.mm.shape[1]))
+        return self.mm
+
 class abf_reader(object):
     def __init__(self, fname):
         from abf_header_dtype import abf_header_dtype
@@ -140,35 +328,6 @@ class abf_reader(object):
         synch_array = np.fromfile(self.fid, synch_array_dtype, self.header['f_structure']['lSynchArraySize'])
         return synch_array
 
-    def get_dp_pad(self):
-        #the total number of data points aquired minus the number of
-        #data points defined in the epochs gives the padding data in
-        #the file, half of this pad is at the beginning of the file,
-        #and half at the end
-
-        #because epochs can be defined as off, meaning no data are
-        #aquired, have to filter epochs by epoch type != 0, meaning
-        #data are aquired.
-        self._actv_wv = np.nonzero(self.header['ext_epoch_waveform_pulses']['nWaveformEnable'][0])[0]
-        if len(self._actv_wv)>1:
-            raise IndexError('this is currently\
-                              not ready to handle\
-                              two active waveforms')
-        else:
-            self._actv_wv = self._actv_wv[0]
-
-        dp_in_epochs = self.header['ext_epoch_waveform_pulses']\
-                     ['lEpochInitDuration'][0][self._actv_wv].sum()
-
-                #this is the subtraction
-        self._dp_pad =\
-        (self.header['trial_hierarchy']['lNumSamplesPerEpisode'][0] \
-        / self.header['trial_hierarchy']['nADCNumChannels'][0]) \
-        - dp_in_epochs
-        #half of this space added before the epoch, and half after, so
-        #compute the left pad for convience
-        self._dp_lpad = self._dp_pad / 2
-
     def sample_rate(self):
         try:
             self._sample_rate
@@ -180,85 +339,6 @@ class abf_reader(object):
           /self.header['trial_hierarchy']['fADCSampleInterval']\
           /self.header['trial_hierarchy']['nADCNumChannels']
           return self._sample_rate[0]
-
-    def epochs_from_header(self):
-        # have to figure out how to deal with active vs. inactive
-        # epochs might be glued together in an object, a 'constructed waveform',
-
-        self.episodes_from_header()
-        
-        #eventually, create an two item list of lists: each sublist
-        #will be a list of epoch objects
-        #but for now:
-        self.epochs = []
-        
-        #for readibility
-        eewp = self.header['ext_epoch_waveform_pulses']
-
-        self._actv_wv = np.nonzero(eewp['nWaveformEnable'][0])[0]
-        if len(self._actv_wv)>1:
-            raise IndexError('this is currently not ready to handle to active waveforms')
-        else:
-            self._actv_wv = self._actv_wv[0]
-
-        #get the number of epochs, by using the type. There are 10
-        #possible epochs, those whos type is not zero are actually
-        #defined/inuse
-        self._num_epochs = np.nonzero(eewp['nEpochType'][0][self._actv_wv])[0].size
-
-        # more data are recorded than the num data points defined in
-        # the epochs.
-
-        # Here is a kludge to get the indexes of each
-        # epoch correct, note that I am using the extended epoch
-        # wavefrom pulses portion of the header
-        try:
-            self._dp_pad
-        except AttributeError:
-            self.get_dp_pad()
-
-        tmp_dp_counter = 0
-        tmp_dp_counter += self._dp_lpad
-
-        # Make an epoch object for each epoch.
-        # At the moment only support abfs with a single active waveform
-        for epoch in range(self._num_epochs):
-            tmp_epoch_level_init = eewp['fEpochInitLevel'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch_dur_init = eewp['lEpochInitDuration'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch_type = eewp['nEpochType'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch_level_incrm = eewp['fEpochLevelInc'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch_dur_incrm = eewp['lEpochDurationInc'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch = abf_epoch(tmp_epoch_level_init,
-                          tmp_epoch_dur_init, tmp_epoch_type,
-                                  tmp_dp_counter, self,
-                                  tmp_epoch_level_incrm,
-                                  tmp_epoch_dur_init)
-            tmp_dp_counter += tmp_epoch_dur_init
-            self.epochs.append(tmp_epoch)
-
-    def episodes_from_header(self):
-        '''This creates episodes, but i think episodes composed of epochs with increasing or decreasung durations will break this'''
-        self.episodes = []
-        t_h = self.header['trial_hierarchy']
-        self._episode_len = t_h['lNumSamplesPerEpisode'] /\
-            t_h['nADCNumChannels']
-        self._num_episodes = t_h['lEpisodesPerRun']
-        for episode in range(self._num_episodes):
-            tmp_episode = abf_episode(self._episode_len * episode, episode)
-            self.episodes.append( tmp_episode )
-        self.episodes = np.array(self.episodes)
-
-    def episode_data(self):
-        '''reshape continous data into composite episodes, right now incrementing episode/epoch lengths are not supported'''
-        self.episodes_from_header()
-        self.read_data()
-        self.mm = self.mm.reshape((self._num_episodes, self._episode_len, self.mm.shape[1]))
-        return self.mm
 
     def start_time(self):
         try:
