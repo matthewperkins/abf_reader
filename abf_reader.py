@@ -3,33 +3,88 @@ import os
 import numpy as np
 from tempfile import mkdtemp
 
-# I have to decide if I want to use relative or absolute indxs I think
-# I should use absolute?  waveform should be generic, having the
-# signatures of a generic data source.
-
-# I think I am going to make this class only for deriving
 class waveform(object):
     def __init__(self, **kwds):
         # I think I should make the start index absolute, to the abf file.
-        self._start_indx = 0
-        self._end_indx = 0
         self._len = 0
         super(waveform, self).__init__(**kwds)
 
     def __call__(self):
         pass
 
-class epoch(waveform):
-    def __init__(self, data, **kwds):
-        # I think I should make the start index absolute, to the abf file.
-        self._data = data
-        super(epoch, self).__init__(**kwds)
-        self._start_indx = 0
-        self._end_indx = len(data)
-        self._len = len(data)
+# floating methods to be added to amtc_abf_waveform on parsing the
+# header, e.i. for steps and ramps
+def dac_step(self):
+    from np import tile
+    return tile(self._level, self._len)
+
+def dac_ramp(self):
+    from numpy import r_
+    self._prev_level
+    self._level
+    self._len
+    try:
+        self._ramp(r_[0:self._len])
+    except AttributeError:
+        from scipy.interpolate import interp1d
+        # make interpolation function, prob better way
+        leng = self._len
+        prv = self._prev_level
+        lvl = self._level
+        self._ramp = interp1d([0,self._len],
+                              [self._prev_level,self._level])
+        self.dac_ramp()
+
+class atmc_abf_waveform(waveform):
+    def __init__(self, abf_reader, start_row, num_rows, **kwds):
+        super(atmc_abf_waveform, self).__init__(**kwds)
+        self._start_row = start_row
+        self._len = num_rows
+        self._abr = abf_reader
 
     def __call__(self):
-        return self._data
+        return self._abr.read_data(start_row = self.start_row,
+                                   num_rows = self.num_rows)
+
+    def _init_dac(self, dac_num, dac_type, lvl, prev_lvl):
+        import types
+        assert (dac_num == 0 or dac_num == 1)
+        assert (dac_type == 0 or dac_type ==1)
+        self._level = lvl
+        self._prev_level = prev_lvl
+        dac_cmd = "%s%d" % ('dac',dac_num)
+        if dac_type == 0:
+            # type is step
+            self.__dict__['dac_cmd'] = types.MethodType(dac_step, self)
+        if dac_step ==1:
+            # type is ramp
+            self.__dict__['dac_cmd'] = types.MethodType(dac_ramp, self)
+
+class abf_episdc_cnstrctr(object):
+    def __init__(self, abf_reader):
+        self._abr = abf_reader
+
+        #    def crt_atmcs(self):
+
+    # def gen_episodes(self):
+    #     num_epsds = self._abr.header['trial_hierarchy']['lEpisodesPerRun']
+    #     for epsd_num in range(num_epsds):
+            
+
+    def actv_epchs(self, dac_num):
+        assert (dac_num == 0 or dac_num == 1)
+        assert (dac_type == 0 or dac_type ==1)
+        return (np.nonzero(self._abr.header['ext_epoch_waveform_pulses']\
+                           ['nWaveformEnable'][0, waveform])[0])
+
+    def get_dp_pad(self, dac_num = 0):
+        '''get dp_pad for the designated  waveform'''
+        # FINALLY FIGURED OUT HOW THE PRE AND POST HOLDS ARE
+        # DETERMINED, THEY ARE EPISODE LENGTH / 64 (MODULO DIV)
+        # from the pclamp guide on LTP of all things
+        SmplsPerEpsd = self._abr.header['trial_hierarchy']['lNumSamplesPerEpisode'][0]
+        dp_one_side_pad = int(SmplsPerEpsd) / int(64)
+        return dp_one_side_pad
 
 class waveform_collection(waveform):
     def __init__(self, list_of_waveforms, **kwds):
@@ -38,7 +93,7 @@ class waveform_collection(waveform):
         super(waveform, self).__init__(**kwds)
         self.waveforms = list_of_waveforms
 
-        # make sure each item is list is either wavefrom or
+        # make sure each item in list is either wavefrom or
         # waveform_collection type
         for wvf in self.waveforms:
             assert(issubclass(type(wvf),waveform))
@@ -58,6 +113,10 @@ class waveform_collection(waveform):
         return (self.waveforms[self._current_waveform])
 
     def _rewind(self):
+        try:
+            self.next()
+        except StopIteration:
+            pass
         self._current_waveform = -1
 
     def __call__(self):
@@ -196,15 +255,37 @@ class abf_reader(object):
         from abf_header_dtype import abf_header_dtype
         self._headr_struct = abf_header_dtype
         self.fname = os.path.basename(fname)
-        self.path = os.path.dirname(os.path.abspath(fname))
+        if os.path.isabs(fname):
+            self.path = os.path.dirname(fname)
+        else:
+            self.path = os.path.dirname(os.path.abspath(fname))
         self.path_file = self.path + os.sep + self.fname
         self.fid = file(self.path_file, 'rb')
         self.read_header()
         self.addGain()
         self._chan_holder = -1
 
+        # for establishing order of array in memory, (used in read methods)
+        # self.hdr_offset()
+        # self.total_aq()
+        # self.num_chans()
+
+        # make an atomic size, so that data can be broken up with out
+        # segmenting cols(channels)
+        if self.header['f_structure']['nDataFormat'][0]==1: #float data
+            self.base_size = 4 * self.num_chans() # 4byte size per float
+        elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
+            self.base_size = 2 * self.num_chans() # 2byte size per int
+
     # custom get and set state allow pickle to handel the pickleing of
     # object with out choking on file
+
+    def hdr_offset(self):
+        from abf_header_defs import ABF_BLOCKSIZE
+        return (self.header['f_structure']['lDataSectionPtr'] * ABF_BLOCKSIZE)
+
+    def total_aq(self):
+        return (self.header['fid_size_info']['lActualAcqLength'][0])
         
     def __getstate__(self):
         odict = self.__dict__.copy() # copy the dict since we change it
@@ -262,46 +343,51 @@ class abf_reader(object):
         #rstrip removes the trailing white space
         return chans[sampled_chans[chan_no]].rstrip()
 
-    def read_data(self):
+    def read_data(self, **kwds):
         '''reads multiplexed data from abfs into an array'''
         ## want to have this method return an iterator that provides data until its out.
         ## have to use data from the header to do this
         ## the times that are asso with discontinuous recording are wonky
-        from numpy import fromfile, float32, int16, memmap, float
-        from abf_header_defs import ABF_BLOCKSIZE
-        offset = self.header['f_structure']['lDataSectionPtr'] * ABF_BLOCKSIZE
-        total_aq = self.header['fid_size_info']['lActualAcqLength'][0]
-        numchans = self.header['trial_hierarchy']['nADCNumChannels'][0]
-        howmanyreads = self.header['trial_hierarchy']['lNumSamplesPerEpisode'][0] \
-            *  self.header['fid_size_info']['lActualEpisodes'][0] / numchans
-        read_seq = self._read_seq()
-        ncols = len(read_seq)
-        nrows = total_aq/numchans
-        reads = map(lambda read: 'adc_' + str(read), read_seq)
+        from numpy import float32, int16, memmap
 
+        # prep to establish order of array in memory
+        from abf_header_defs import ABF_BLOCKSIZE
+        offset = self.hdr_offset()
+        total_aq = self.total_aq()
+        numchans = self.num_chans()
+        ncols = numchans
+        nrows = total_aq/numchans
+
+        # handle optional kwds, for subsetting data
+        # start_row and needs to be transulated into byte offset
+        # other kwds, num_rows or stop_row do not
+        if 'start_row' in kwds.keys():
+            start_row = kwds.pop('start_row')
+            offset += (start_row * self.base_size)
+        if 'num_rows' in kwds.keys():
+            nrows = kwds.pop('num_rows')
+        if 'stop_row' in kwds.keys():
+            # check if start_row is beginning
+            if offset!=self.hdr_offset:
+                nrows = stop_row - start_row
+            elif offset==self.hdr_offset:
+                nrows = stop_row
+         
         #see if is float data
         if self.header['f_structure']['nDataFormat'][0]==1: 
-            data = memmap(self.fid, dtype = float32, shape = (nrows,ncols), offset = offset)
+            data = memmap(self.fid, dtype = float32,
+                          shape = (nrows,ncols), offset = offset)
+            data = np.copy(data)
+            return data
 
         #see if is integer data
-        elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
-            data = memmap(self.fid, dtype = int16, shape = (nrows,ncols), mode = 'r',offset = offset)
-
-        # make a writeable temporarory memory map for helping? with memusage?,
-        tmp_dir = mkdtemp()
-        tmp_map_name = os.path.join(tmp_dir, '_tmp_' + self.fname.split(os.extsep)[0])
-        self.mm = memmap(tmp_map_name, dtype = float32, shape = (nrows,ncols), mode = 'w+')
-        self.mm[:] = data[:].astype(np.float32)
-
-        # delete the memory map to flush from file
-        del self.mm
-
-        # then reload?
-        self.mm = memmap(tmp_map_name, dtype = float32, shape = (nrows,ncols), mode = 'r+')
-
-        # now do some scaling
-        self.mm = self.scale_int_data(self.mm)
-        return self.mm
+        elif self.header['f_structure']['nDataFormat'][0]==0: 
+            unscl_data = memmap(self.fid, dtype = int16,
+                          shape = (nrows,ncols),
+                mode = 'r',offset = offset)
+            # now scale data and return
+            unscl_data = unscl_data.astype(float32)
+            return (self.scale_int_data(unscl_data))
 
     def scale_int_data(self, data):
         for indx, chan in enumerate(self._read_seq()):
@@ -377,10 +463,11 @@ class abf_episode:
         self._dp_start = data_point_start
         self._episode_num = episode_num
 
-class abf_epoch:
 
-    def __init__(self, level_init,  dur_init, epoch_type, data_point_start,\
-                     abf_reader, level_incrm=0, dur_incrm=0):
+# epoch should be a waveform collection.
+class abf_epoch(waveform):
+
+    def __init__(self, abf_reader, start_row, num_nows,**kwds):
         # data point_start is relative to the start of the episode, it is not
         # an index for data
         ### incrementing durations are not supported now.
@@ -390,45 +477,29 @@ class abf_epoch:
         self._level_incrm = level_incrm
         self._dur_incrm = dur_incrm
         self._type = epoch_type
-        self._level = level_init
-        self._levels = self.levels()
-        self._dur = dur_init
         self._dp_start = data_point_start
-        self._dp_end = self._dp_start + self._dur
+        self._dp_end = data_point_end
         if epoch_type==1:
             self._type = 'step'
         elif epoch_type==2:
             self._type = 'ramp'
+        super(abf_epoch, self).__init__(**kwds)
 
     def __call__(self):
-        levels = self._levels
-        return (levels, self.data())
+        return (self.data())
 
-    def levels(self):
+    def data(self):
+        # indexs are [episode,datapoints,chan_no]
+        return self._abf_reader.read_data()[self._dp_start : self._dp_start + self._dur_init, :]
+
+    def command(cmmnd_wvf=0):
         ###NOTE THIS METHOD IS BROKEN, NEEDS TO LOOK FIRST AT THE
         ###['ext_epoch_waveform_pulses']['nWaveformEnable'] and only
         ###return the waveform pulses that are enabled. - ei the DAC
         ###that are out putting stuff in the protocol
-        self._levels = []
+        if self._type == 'step':
+            return self._level
         for epi_num, episode in enumerate(self._abf_reader.episodes):
             self._levels.append(self._level_init + (self._level_incrm * epi_num))
         self._levels = np.array(self._levels)
         return self._levels
-
-    def data(self):
-        self._abf_reader.episode_data()
-        # indexs are [episode,datapoints,chan_no]
-        return self._abf_reader.mm[:, self._dp_start : self._dp_start + self._dur_init, :]
-
-#    def mk_durs(self):
-        # self._dur = self._dur_init + (self._dur_incrm * iter_num)
-        # I have not tried any of the incrementing duration protocols, and I
-        # am not sure if the episode length will stay the same for all
-        # episode, despite the increasing duration of an epoch, for now, I
-        # will assume that the episode length in the header is fixed, and so
-        # the epochs class should have start and stop data point indexes as
-        # properties / fields that are relative to the episode.
-        ########## for now, just right this for non- incrementing durations -
-        ########## add later if needed
-
-                     
