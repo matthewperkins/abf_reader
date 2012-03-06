@@ -37,4 +37,3 @@ def rename_abf(fname):
         new_name = newyear+'_'+newmonth+'_'+day+'_'+newfnum+os.extsep+'abf'
         new_path_file = os.path.join(path, new_name)
         os.rename(path_file, new_path_file)
-

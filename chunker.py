@@ -6,15 +6,11 @@ class abf_chunker(object):
     ''' use this to return data in chunks from abf files'''
     def __init__(self, abr):
         self.abr = abr
-        self.dp = self.abr.header['fid_size_info']['lActualAcqLength'][0]
+        self.dp = self.abr.total_aq
         self._chunk_counter = 0
-        self.header_size = self.abr.header['f_structure']['lDataSectionPtr']\
-                           * self.abr.defs.ABF_BLOCKSIZE
-        self.numchans = self.abr.header['trial_hierarchy']['nADCNumChannels'][0]
-        self.howmanyreads = self.abr.header['trial_hierarchy']['lNumSamplesPerEpisode'][0] \
-            *  self.abr.header['fid_size_info']['lActualEpisodes'][0] / self.numchans
-        self.read_seq = self.abr._read_seq()
-        self.ncols = len(self.read_seq)
+        self.header_size = self.abr.hdr_offset
+        self.numchans = self.abr.num_chans()
+        self.ncols = self.numchans
         self.nrows = self.dp/self.numchans
 
         ###############
@@ -35,17 +31,13 @@ class abf_chunker(object):
         self.set_range((self.left, self.right))
         self.make_chunk_size()
 
-
-
     def second_to_dp(self, second):
-
         # second timing ignores num channels of aquisition
         # have to multiply by the row size
         dp = second * self.abr.sample_rate() * self.base_size
         return int(dp)
 
     def second_to_row(self, second):
-
         # second timing ignores num channels of aquisition
         # have to multiply by the row size
         row = second * self.abr.sample_rate()
@@ -67,18 +59,15 @@ class abf_chunker(object):
         be seconds of x range'''
         # style points to matplotlib, yay free software
 
-        #if range is two integers
         if width is None and iterable(left):
             if map(type, left)==[int]*2:
                 self.left, self.right = left
             elif map(type, left)==[float]*2:
-                
                 #if floats are btwn 0-1 inclsv - assume they are fractions of x range
                 tested_prcnt_rng = filter(lambda a: a>=0 and a<=1, left)
                 if len(tested_prcnt_rng)==2:
                     self.left = int(self.nrows * left[0])
                     self.right = int(self.nrows * left[1])
-
                 #if range is floats and seconds true, 
                 elif seconds==True:
                     self.left = self.second_to_row(left[0])
