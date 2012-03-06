@@ -118,9 +118,9 @@ class dac_waveform(waveform_collection):
     def find_actv_epchs(self):
         epch_types = self._abr.header['ext_epoch_waveform_pulses']\
             ['nEpochType'][0, self._dac_num]
-        actv_epchs = np.nonzero(epch_types)[0]
-        self._len_epch_list = len(actv_epchs)
-        return (actv_epchs)
+        self._actv_epchs = np.nonzero(epch_types)[0]
+        self._len_epch_list = len(self._actv_epchs)
+        return (self._len_epch_list)
 
     def _make_epch(self, epch_num):
         eewp = self._abr.header['ext_epoch_waveform_pulses']
@@ -147,7 +147,11 @@ class dac_waveform(waveform_collection):
                 raise StopIteration            
         except AttributeError:
             self._current_epoch = 0
-        tmp_epch = self._make_epch(self._current_epoch)
+
+        # make sure to look up the indx in the list of actv epchs,
+        # incase their are inactive epochs, this will aviod them
+        epch_num = self._actv_epchs[self._current_epoch]
+        tmp_epch = self._make_epch(epch_num)
         self.append(tmp_epch)
 
     def append(self, epoch):
@@ -157,8 +161,12 @@ class dac_waveform(waveform_collection):
         assert (ordinal > 0)
         return self._list_o_epochs[ordinal-1]
 
-    # def actv_dacs(self):
-    # return (np.nonzero(self._eewp['nWaveformEnable'][0])[0])
+    def next_episode(self):
+        for epch in self._list_o_epochs:
+            epch.next()
+
+    def rewind_episode(self):
+        [epch._rewind_episode() for epch in self._list_o_epochs]
 
 class abf_waveform(waveform):
     def __init__(self, abf_reader, start_row, num_rows, **kwds):
@@ -185,7 +193,7 @@ class epoch(waveform):
         self._dur_init = dur_init
         self._level_incrm = level_incrm
         self._dur_incrm = dur_incrm
-        self._next_episode()
+        self.next()
 
         # dynamically set a level method, based on the epoch type
         import types
@@ -199,20 +207,24 @@ class epoch(waveform):
         self._th = self._abr.header['trial_hierarchy']
         self._num_episodes = self._th['lEpisodesPerRun'][0]
 
-    def _next_episode(self):
+    def next(self):
         try:
             self._epsd_num += 1
             if (self._epsd_num+1>self._num_episodes):
                 raise StopIteration            
         except AttributeError:
             self._epsd_num = 0
+        return self
+
+    def __iter__(self):
+        return self
 
     def _set_epsd_num(self, epsd_num):
         self._epsd_num = epsd_num
 
     def _rewind_episode(self):
         try:
-            self._next_episode()
+            self.next()
         except StopIteration:
             pass
         self._epsd_num = -1
@@ -331,7 +343,7 @@ class abf_reader(object):
         self.read_header()
         self.addGain()
         self._chan_holder = -1
-
+        self._num_episodes = self.header['trial_hierarchy']['lEpisodesPerRun'][0]
         # for establishing order of array in memory, (used in read methods)
         # self.hdr_offset()
         # self.total_aq()
