@@ -6,9 +6,9 @@ class abf_chunker(object):
     ''' use this to return data in chunks from abf files'''
     def __init__(self, abr):
         self.abr = abr
-        self.dp = self.abr.total_aq
+        self.dp = self.abr.total_aq()
         self._chunk_counter = 0
-        self.header_size = self.abr.hdr_offset
+        self.header_size = self.abr.hdr_offset()
         self.numchans = self.abr.num_chans()
         self.ncols = self.numchans
         self.nrows = self.dp/self.numchans
