@@ -223,11 +223,7 @@ class epoch(waveform):
         self._epsd_num = epsd_num
 
     def _rewind_episode(self):
-        try:
-            self.next()
-        except StopIteration:
-            pass
-        self._epsd_num = -1
+        del self._epsd_num
             
     def _set_epsd_num(self, epsd_num):
         self._epsd_num = epsd_num
@@ -361,10 +357,14 @@ class abf_reader(object):
 
     def hdr_offset(self):
         from abf_header_defs import ABF_BLOCKSIZE
-        return (self.header['f_structure']['lDataSectionPtr'] * ABF_BLOCKSIZE)
+        return ((self.header['f_structure']['lDataSectionPtr'] * ABF_BLOCKSIZE)[0])
 
     def total_aq(self):
         return (self.header['fid_size_info']['lActualAcqLength'][0])
+
+    def actv_dacs(self):
+        return (np.nonzero(self.header['ext_epoch_waveform_pulses']\
+            ['nWaveformEnable'][0])[0])
         
     def __getstate__(self):
         odict = self.__dict__.copy() # copy the dict since we change it
