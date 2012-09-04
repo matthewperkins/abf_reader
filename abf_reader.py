@@ -115,6 +115,14 @@ class dac_waveform(waveform_collection):
             self._add_next()
         super(dac_waveform, self).__init__(self._list_o_epochs, **kwds)
 
+    def __call__(self, cmd = '__call__'):
+        try:
+            return super(dac_waveform, self).__call__(cmd = cmd)
+        except AttributeError:
+            self.rewind_episode()
+            self.next_episode()
+            return super(dac_waveform, self).__call__(cmd = cmd)
+
     def find_actv_epchs(self):
         epch_types = self._abr.header['ext_epoch_waveform_pulses']\
             ['nEpochType'][0, self._dac_num]
@@ -157,13 +165,14 @@ class dac_waveform(waveform_collection):
     def append(self, epoch):
         self._list_o_epochs.append(epoch)
 
-    def prev_epoch(self, ordinal):
+    def get_epoch(self, ordinal):
         assert (ordinal > 0)
         return self._list_o_epochs[ordinal-1]
 
     def next_episode(self):
         for epch in self._list_o_epochs:
             epch.next()
+        return self
 
     def rewind_episode(self):
         [epch._rewind_episode() for epch in self._list_o_epochs]
@@ -223,7 +232,10 @@ class epoch(waveform):
         self._epsd_num = epsd_num
 
     def _rewind_episode(self):
-        del self._epsd_num
+        try:
+            del self._epsd_num
+        except AttributeError:
+            pass                
             
     def _set_epsd_num(self, epsd_num):
         self._epsd_num = epsd_num
@@ -232,7 +244,7 @@ class epoch(waveform):
         if self._ordinal == 0:
             return 0
         else:
-            prv_epch = self._dac_waveform.prev_epoch(self._ordinal)
+            prv_epch = self._dac_waveform.get_epoch(self._ordinal)
             prv_epch._set_epsd_num(self._epsd_num)
             return (prv_epch.level()[-1])
 
@@ -256,7 +268,7 @@ class epoch(waveform):
             return ((self._epsd_num * self._smpls_per_epsd()) +
                     self.get_dp_pad())
         else:
-            prv_epch = self._dac_waveform.prev_epoch(self._ordinal)
+            prv_epch = self._dac_waveform.get_epoch(self._ordinal)
             prv_epch._set_epsd_num(self._epsd_num)
             return (prv_epch._dp_end())
 
@@ -264,10 +276,10 @@ class epoch(waveform):
         if self._ordinal == 0:
             return (self._dp_start() + self._len())
         else:
-            prv_epch = self._dac_waveform.prev_epoch(self._ordinal)
+            prv_epch = self._dac_waveform.get_epoch(self._ordinal)
             prv_epch._set_epsd_num(self._epsd_num)
-            return (prv_epch._dp_start() +
-                    prv_epch._len())
+            return (prv_epch._dp_end() +
+                    self._len())
 
     def _level(self):
         # this returns the _level property, different than the
