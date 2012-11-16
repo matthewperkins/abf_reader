@@ -3,340 +3,121 @@ import os
 import numpy as np
 from tempfile import mkdtemp
 
-class waveform(object):
-    def __init__(self, **kwds):
-        # I think I should make the start index absolute, to the abf file.
-        # self._len = 0
-        super(waveform, self).__init__(**kwds)
-
-    def __call__(self):
-        pass
-
-    def _len(self):
-        pass
-
-class waveform_collection(waveform):
-    def __init__(self, list_of_waveforms, **kwds):
-
-        # init super first so don't write over self._len
-        super(waveform, self).__init__(**kwds)
-        self.waveforms = list_of_waveforms
-
-        # make sure each item in list is either wavefrom or
-        # waveform_collection type
-        for wvf in self.waveforms:
-            assert(issubclass(type(wvf),waveform))
-        
-        # preindex the waveform length
-        self._len = 0
-        for wvf in self.waveforms:
-            self._len += len(wvf())
-
-    def next(self):
-        try:
-            self._current_waveform += 1
-            if (self._current_waveform+1>len(self.waveforms)):
-                raise StopIteration            
-        except AttributeError:
-            self._current_waveform = 0
-        return (self.waveforms[self._current_waveform])
-    
-    def _rewind(self):
-        try:
-            del self._current_waveform
-        except AttributeError:
-            pass
-
-    def __call__(self, cmd = '__call__'):
-        from numpy import zeros
-        length = self._len
-
-        # preindex an array to hold the stitched array
-        # call the first wvf to get its shape
-        # rewind _current_waveform here
-        self._rewind()
-        wvf = self.next()
-        d = wvf.__getattribute__(cmd)()
-        datashp = wvf.__getattribute__(cmd)().shape
-        if np.size(datashp)==1:
-            out_data = np.zeros((self._len,))
-        elif np.size(datashp)==2:
-            out_data = np.zeros((self._len, datashp[1]))
-        plc_hldr = 0
-        self._rewind()
-
-        while True:
-            try:
-                wvf = self.next()
-                td = wvf.__getattribute__(cmd)()
-                out_data[plc_hldr:(plc_hldr+len(td))] = td
-                plc_hldr += len(td)
-            except StopIteration:
-                return out_data
-
-# floating methods to be added to abf_waveform on parsing the
-# header, e.i. for steps and ramps
-
-def dac_step(self):
+def dac_step(level, leng):
     from numpy import tile
-    epsd_num = self._epsd_num
-    lvl = self._level()
-    leng = self._len()
     return tile(lvl, leng)
 
-def dac_ramp(self, epsd_num):
+def dac_ramp(rampto, startat, leng):
     from numpy import r_
-    epsd_num = self._epsd_num
-    leng = self._len()
-    try:
-        return (self._ramp(r_[0:leng]))
-    except AttributeError:
-        from scipy.interpolate import interp1d
-        # make interpolation function, prob better way
-        prv = self._prev_epch_lvl()
-        lvl = self._level()
-        self._ramp = interp1d([0,leng],
-                              [prv,lvl])
-        return (self._ramp(r_[0:leng]))
+    from scipy.interpolate import interp1d
+    # make interpolation function, prob better way
+    return (interp1d([0,leng], [startat,rampto]))
 
-class dac_waveform(waveform_collection):
-    def __init__(self, abf_reader, dac_num, **kwds):
-        assert (dac_num == 0 or dac_num == 1)
-        self._dac_num = dac_num
-        self._abr = abf_reader
-        self._list_o_epochs = []
-        
-        # construction is complicated involve three methods below,
-        # find_actv_epchs, _make_epch, _add_next
-        # this could be much cleaner.
-        self.find_actv_epchs()
-        for i in range(self._len_epch_list):
-            self._add_next()
-        super(dac_waveform, self).__init__(self._list_o_epochs, **kwds)
+def find_actv_epchs(abr_header, DAC_num):
+    epch_types = abr_header['ext_epoch_waveform_pulses']\
+        ['nEpochType'][0, DAC_num]
+    return np.nonzero(epch_types)[0]
 
-    def __call__(self, cmd = '__call__'):
-        try:
-            return super(dac_waveform, self).__call__(cmd = cmd)
-        except AttributeError:
-            self.rewind_episode()
-            self.next_episode()
-            return super(dac_waveform, self).__call__(cmd = cmd)
+def parse_ep_stim(abf, DAC_num):
+    abf.read_header()
+    abf_header = abf.header
 
-    def find_actv_epchs(self):
-        epch_types = self._abr.header['ext_epoch_waveform_pulses']\
-            ['nEpochType'][0, self._dac_num]
-        self._actv_epchs = np.nonzero(epch_types)[0]
-        self._len_epch_list = len(self._actv_epchs)
-        return (self._len_epch_list)
+    # values to compute
+    # sweep_indxs
+    # episode_indxs
+    # epoch_indxs
+    # epoch_levels
+    # epoch_types
+    
+    num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    num_epchs = len(actv_epchs)
+    DAC_len = abf.total_aq() / abf.num_chans()
+    sweep_len = DAC_len/num_epsds
+    pad = get_dp_pad(abf)
+    epsd_len = sweep_len - 2*pad
 
-    def _make_epch(self, epch_num):
-        eewp = self._abr.header['ext_epoch_waveform_pulses']
-        level_init = eewp['fEpochInitLevel'][0]\
-            [self._dac_num][epch_num]
-        dur_init = eewp['lEpochInitDuration'][0]\
-            [self._dac_num][epch_num]
-        epoch_type = eewp['nEpochType'][0]\
-            [self._dac_num][epch_num]
-        level_incrm = eewp['fEpochLevelInc'][0]\
-            [self._dac_num][epch_num]
-        dur_incrm = eewp['lEpochDurationInc'][0]\
-            [self._dac_num][epch_num]
-        tmp_epoch = epoch(self._abr, self,
-                          epch_num, epoch_type,
-                          level_init, dur_init,
-                          level_incrm, dur_incrm)
-        return tmp_epoch
+    eewp = abf_header['ext_epoch_waveform_pulses']
 
-    def _add_next(self):
-        try:
-            self._current_epoch += 1
-            if (self._current_epoch+1>self._len_epch_list):
-                raise StopIteration            
-        except AttributeError:
-            self._current_epoch = 0
+    # epoch levels
+    level_inits = eewp['fEpochInitLevel'][0]\
+        [DAC_num][actv_epchs]
+    level_incrms = eewp['fEpochLevelInc'][0]\
+        [DAC_num][actv_epchs]
+    range_array = np.transpose(np.tile(np.c_[0:num_epsds], (num_epchs,1)))
+    tmp_lvl_incrms = np.tile(level_incrms, (num_epsds,1)) * range_array
+    levels = np.tile(level_inits,(num_epsds,1))+tmp_lvl_incrms
 
-        # make sure to look up the indx in the list of actv epchs,
-        # incase their are inactive epochs, this will aviod them
-        epch_num = self._actv_epchs[self._current_epoch]
-        tmp_epch = self._make_epch(epch_num)
-        self.append(tmp_epch)
+    # epoch durs
+    dur_inits = eewp['lEpochInitDuration'][0]\
+        [DAC_num][actv_epchs]
+    dur_incrms = eewp['lEpochDurationInc'][0]\
+        [DAC_num][actv_epchs]
+    tmp_dur_incrms = np.tile(dur_incrms, (num_epsds,1)) * range_array
+    durs = np.tile(dur_inits,(num_epsds,1))+tmp_dur_incrms
 
-    def append(self, epoch):
-        self._list_o_epochs.append(epoch)
+    # epoch types
+    epoch_types = eewp['nEpochType'][0]\
+        [DAC_num][actv_epchs]
 
-    def get_epoch(self, ordinal):
-        assert (ordinal > 0)
-        return self._list_o_epochs[ordinal-1]
+    # make sweeps slices
+    lft = np.r_[0:DAC_len+1:sweep_len][:-1]
+    rght = np.r_[0:DAC_len+1:sweep_len][1:]
+    sweep_indxs = c_[lft,rght]
+    sweep_slc_array = np.array([slice(l,r) for l,r in zip(lft, rght)])
 
-    def next_episode(self):
-        for epch in self._list_o_epochs:
-            epch.next()
-        return self
+    # make epsd slices
+    lft += pad
+    rght = lft+epsd_len
+    epsd_indxs = c_[lft,rght]
+    epsd_slc_array = np.array([slice(l,r) for l,r in zip(lft, rght)])
 
-    def rewind_episode(self):
-        [epch._rewind_episode() for epch in self._list_o_epochs]
+    #### epoch starts (rel to episode start) ####
+    
+    # assume left points are fixed in
+    # duration changing epochs. I hope this means the maximum duration
+    # for an epoch (over the whole trail) must pass before next epoch
+    # statrs
+    max_dur = np.max(durs,0)
+    max_durs = np.tile(max_dur, (num_epsds,1))
 
-class abf_waveform(waveform):
-    def __init__(self, abf_reader, start_row, num_rows, **kwds):
-        super(abf_waveform, self).__init__(**kwds)
-        self._start_row = start_row
-        self._len = num_rows
-        self._abr = abf_reader
+    # accumulate durations (add a zero column) to get starts
+    strts = c_[repeat(0,num_epsds), max_durs[:,0:-1]]
+    epch_strt_indxs = np.add.accumulate(strts,1)
 
-    def __call__(self):
-        return self._abr.read_data(start_row = self._start_row,
-                                   num_rows = self._len)
+    #### epoch starts (rel to 0) ####
+    for i_epch in range(num_epchs):
+        epch_strt_indxs[:,i_epch]+=epsd_indxs[:,0]
 
-class epoch(waveform):
-    def __init__(self, abf_reader, dac_wvfrm,
-                 ordinal, epoch_type,
-                 level_init, dur_init,
-                 level_incrm, dur_incrm, **kwds):
-        super(epoch, self).__init__(**kwds)
-        self._abr = abf_reader
-        self._dac_waveform = dac_wvfrm
-        self._ordinal = ordinal
-        self._type = epoch_type
-        self._level_init = level_init
-        self._dur_init = dur_init
-        self._level_incrm = level_incrm
-        self._dur_incrm = dur_incrm
-        self.next()
+    epch_end_indxs = epch_strt_indxs+durs
 
-        # dynamically set a level method, based on the epoch type
-        import types
-        if self._type == 1:
-            # type is step
-            self.__dict__['level'] = types.MethodType(dac_step, self)
-        if self._type == 2:
-            # type is ramp
-            self.__dict__['level'] = types.MethodType(dac_ramp, self)
+    epch_indx_list = []
+    epch_slc_list = []
+    for i_epsd in range(num_epsds):
+        tmp_epsd_list=[]
+        tmp_slc_list=[]
+        for i_epch in range(num_epchs):
+            t = [epch_strt_indxs[i_epsd,i_epch],
+                 epch_end_indxs[i_epsd,i_epch]]
+            tmp_epsd_list.append(t)
+            tmp_slc_list.append(slice(t[0],t[1]))
+        epch_indx_list.append(tmp_epsd_list)
+        epch_slc_list.append(tmp_slc_list)
+    epch_indxs = np.array(epch_indx_list)
 
-        self._th = self._abr.header['trial_hierarchy']
-        self._num_episodes = self._th['lEpisodesPerRun'][0]
+    return (sweep_indxs, epsd_indxs, epch_indxs)
 
-    def next(self):
-        try:
-            self._epsd_num += 1
-            if (self._epsd_num+1>self._num_episodes):
-                raise StopIteration            
-        except AttributeError:
-            self._epsd_num = 0
-        return self
+def get_dp_pad(abf):
+    SmplsPerEpsd = abf.header['trial_hierarchy']\
+        ['lNumSamplesPerEpisode'][0]
+    RowsPerEpsd = (SmplsPerEpsd/abf.num_chans())
 
-    def __iter__(self):
-        return self
+    # FINALLY FIGURED OUT HOW THE PRE AND POST HOLDS ARE
+    # DETERMINED, THEY ARE EPISODE LENGTH / 64 (MODULO DIV)
+    # from the pclamp guide on LTP of all things
+    dp_one_side_pad = int(RowsPerEpsd) / int(64)
+    return dp_one_side_pad
 
-    def _set_epsd_num(self, epsd_num):
-        self._epsd_num = epsd_num
-
-    def _rewind_episode(self):
-        try:
-            del self._epsd_num
-        except AttributeError:
-            pass
-        self.next()
-            
-    def _set_epsd_num(self, epsd_num):
-        self._epsd_num = epsd_num
-
-    def _prev_epch_lvl(self):
-        if self._ordinal == 0:
-            return 0
-        else:
-            prv_epch = self._dac_waveform.get_epoch(self._ordinal)
-            prv_epch._set_epsd_num(self._epsd_num)
-            return (prv_epch.level()[-1])
-
-    def get_dp_pad(self):
-        SmplsPerEpsd = self._abr.header['trial_hierarchy']\
-            ['lNumSamplesPerEpisode'][0]
-        RowsPerEpsd = (SmplsPerEpsd/self._abr.num_chans())
-        
-        # FINALLY FIGURED OUT HOW THE PRE AND POST HOLDS ARE
-        # DETERMINED, THEY ARE EPISODE LENGTH / 64 (MODULO DIV)
-        # from the pclamp guide on LTP of all things
-        dp_one_side_pad = int(RowsPerEpsd) / int(64)
-        return dp_one_side_pad
-
-    def _smpls_per_epsd(self):
-        SmplsPerEpsd = self._th['lNumSamplesPerEpisode'][0]
-        return (SmplsPerEpsd/self._abr.num_chans())
-
-    def _dp_start(self):
-        if self._ordinal == 0:
-            return ((self._epsd_num * self._smpls_per_epsd()) +
-                    self.get_dp_pad())
-        else:
-            prv_epch = self._dac_waveform.get_epoch(self._ordinal)
-            prv_epch._set_epsd_num(self._epsd_num)
-            return (prv_epch._dp_end())
-
-    def _dp_end(self):
-        if self._ordinal == 0:
-            return (self._dp_start() + self._len())
-        else:
-            prv_epch = self._dac_waveform.get_epoch(self._ordinal)
-            prv_epch._set_epsd_num(self._epsd_num)
-            return (prv_epch._dp_end() +
-                    self._len())
-
-    def _level(self):
-        # this returns the _level property, different than the
-        # inflated command level
-        epsd_num = self._epsd_num
-        if self._level_incrm == 0:
-            return self._level_init
-        else:
-            return (self._level_init + (epsd_num * self._level_incrm))
-
-    def _len(self):
-        epsd_num = self._epsd_num
-        if self._dur_incrm == 0:
-            return self._dur_init
-        else:
-            return (self._dur_init + (epsd_num * self._dur_incrm))
-
-    def __call__(self):
-        start_row = self._dp_start()
-        num_rows = self._len()
-        return (self._abr.read_data(start_row = start_row,
-                            num_rows = num_rows))
-
-class episode(abf_waveform):
-    def __init__(self, abf_reader, start_row, num_rows, episode_num, **kwds): 
-        self._epsd_num = episode_num
-        super(episode, self).__init__(abf_reader, start_row, num_rows, **kwds)
-
-class abf_epsd_cnstrctr(object):
-    def __init__(self, abf_reader):
-        self._abr = abf_reader
-        self._th = self._abr.header['trial_hierarchy']
-        self._eewp = self._abr.header['ext_epoch_waveform_pulses']
-        self._num_episodes = self._th['lEpisodesPerRun'][0]
-        
-    def _smpls_per_epsd(self):
-        SmplsPerEpsd = self._th['lNumSamplesPerEpisode'][0]
-        return (SmplsPerEpsd/self._abr.num_chans())
-
-    def __iter__(self):
-        return self
-
-    def _num_episodes(self):
-        return (self._th['lEpisodesPerRun'])
-
-    def next(self):
-        try:
-            self._current_epsd += 1
-            if (self._current_epsd+1>self._num_episodes):
-                raise StopIteration            
-        except AttributeError:
-            self._current_epsd = 0
-        start_row = (self._current_epsd * self._smpls_per_epsd())
-        num_rows = self._smpls_per_epsd()
-        return episode(self._abr, start_row, num_rows, self._current_epsd+1)
-
-        
 class abf_reader(object):
     def __init__(self, fname):
         from abf_header_dtype import abf_header_dtype
