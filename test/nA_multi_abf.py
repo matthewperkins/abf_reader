@@ -7,6 +7,16 @@ import pdb
 from pylab import plot, figure, plt
 from glob import glob
 
+def bwfiltfilt(data, sample_rate, cuttoff_freq):
+    from scipy import signal
+    # design filter
+    norm_pass = 2*math.pi*cuttoff_freq/sample_rate
+    norm_stop = 2*norm_pass
+    (N, Wn) = signal.buttord(wp=norm_pass, ws=norm_stop, gpass=2, gstop=30, analog=0)
+    (b, a) = signal.butter(N, Wn, btype='low', analog=0, output='ba')
+    filtd = signal.filtfilt(b, a, data)
+    return filtd
+
 def many_nA(abf_list, dac_num, epch_num, epsd_num):
     dac_num = dac_num
 

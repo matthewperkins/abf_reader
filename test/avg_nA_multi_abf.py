@@ -36,10 +36,8 @@ def avg_nA(abf_list, dac_num, epch_num, strt_dp, end_dp):
             Vm[fnum, epsd_num] = vmem
     return (nA, Vm)
 
-def main(abf_glob):
+def main(abf_glob, start_dp=2500, end_dp=3000):
     abr_list = [abr(abf) for abf in abf_glob]
-    start_dp = 2500
-    end_dp = 3000
     nA, Vm = avg_nA(abr_list, 0, 2, start_dp, end_dp)
     for col in range(nA.shape[1]):
         plot(nA[:,col], 'o')

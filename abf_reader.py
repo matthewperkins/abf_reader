@@ -43,10 +43,9 @@ class waveform_collection(waveform):
     
     def _rewind(self):
         try:
-            self.next()
-        except StopIteration:
+            del self._current_waveform
+        except AttributeError:
             pass
-        self._current_waveform = -1
 
     def __call__(self, cmd = '__call__'):
         from numpy import zeros
@@ -235,7 +234,8 @@ class epoch(waveform):
         try:
             del self._epsd_num
         except AttributeError:
-            pass                
+            pass
+        self.next()
             
     def _set_epsd_num(self, epsd_num):
         self._epsd_num = epsd_num
@@ -351,21 +351,19 @@ class abf_reader(object):
         self.read_header()
         self.addGain()
         self._chan_holder = -1
-        self._num_episodes = self.header['trial_hierarchy']['lEpisodesPerRun'][0]
-        # for establishing order of array in memory, (used in read methods)
-        # self.hdr_offset()
-        # self.total_aq()
-        # self.num_chans()
+        self._num_episodes = \
+            self.header['trial_hierarchy']['lEpisodesPerRun'][0]
 
+        # rewrite the ADC units into a convience variable, trunc to 2 chars
+        self._ADC_Units = \
+            np.array(self.header['multi-chan_inf']['sADCUnits'][0],
+                     dtype = '|S2')
         # make an atomic size, so that data can be broken up with out
         # segmenting cols(channels)
         if self.header['f_structure']['nDataFormat'][0]==1: #float data
             self.base_size = 4 * self.num_chans() # 4byte size per float
         elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
             self.base_size = 2 * self.num_chans() # 2byte size per int
-
-    # custom get and set state allow pickle to handel the pickleing of
-    # object with out choking on file
 
     def hdr_offset(self):
         from abf_header_defs import ABF_BLOCKSIZE
@@ -378,6 +376,9 @@ class abf_reader(object):
         return (np.nonzero(self.header['ext_epoch_waveform_pulses']\
             ['nWaveformEnable'][0])[0])
         
+    # custom get and set state allow pickle to handel the pickleing of
+    # object with out choking on file
+
     def __getstate__(self):
         odict = self.__dict__.copy() # copy the dict since we change it
         del odict['fid']              # remove filehandle entry
@@ -436,8 +437,6 @@ class abf_reader(object):
 
     def read_data(self, **kwds):
         '''reads multiplexed data from abfs into an array'''
-        ## want to have this method return an iterator that provides data until its out.
-        ## have to use data from the header to do this
         ## the times that are asso with discontinuous recording are wonky
         from numpy import float32, int16, memmap
 
@@ -515,7 +514,8 @@ class abf_reader(object):
           1 * 1000000\
           /self.header['trial_hierarchy']['fADCSampleInterval']\
           /self.header['trial_hierarchy']['nADCNumChannels']
-          return self._sample_rate[0]
+          self._sample_rate = self._sample_rate[0]
+          return self._sample_rate
 
     def start_time(self):
         try:

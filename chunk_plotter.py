@@ -9,7 +9,6 @@ class abf_chunker_plotter(object):
     def __init__(self, _abf_chunker):
         self.num_chunks = _abf_chunker.num_chunk_rows
         self._abf_chunker = _abf_chunker
-        self.frct_chunks = self._abf_chunker.frct_chunks
         self.set_fig_size_inches((8,3))
         self._ylim = {}
         self.set_linewidth()
@@ -21,7 +20,8 @@ class abf_chunker_plotter(object):
 
     def set_fig_size_inches(self, size):
         #size in inches / number chunks(float)
-        self.indiv_fig_width = float(size[0]) / (self.frct_chunks)
+        self.indiv_fig_width = float(size[0]) /\
+                                 (self._abf_chunker.frct_chunks)
         self.indiv_fig_height = float(size[1])
 
     def set_linewidth(self, width = False):
@@ -57,6 +57,12 @@ class abf_chunker_plotter(object):
         #neurograms will only take up about bottom thrid
         nrgtop = cellbtm - 0.025 # give a small (vertical 2.5% pad)
         nrgbtm = 0
+
+        #if there is a filetype keyword, pop and set
+        if 'filetype' in kwds.keys():
+            filetype = kwds.pop('filetype')
+        else:
+            filetype = 'png'
         
         import subprocess
         tmp_files = []
@@ -86,9 +92,10 @@ class abf_chunker_plotter(object):
                 ax.plot(data, linewidth = self.linethickness, color = 'black')
                 ax.set_ylim(self._ylim['neurgrms'][neurgrm_num])
                 ax.set_xlim((0,len(d)))
+            print(fig.get_size_inches())
             del d
-            pdb.set_trace()
-            filname = "%s_%03d%s" % ('tmp', i, '.png')
+            filname = "%s_%03d.%s" % ('tmp', i, filetype)
+            print(filname)
             tmp_files.append(filname)
             fig.savefig(filname, dpi = dpi)
             ### the order that these are cleared is very important, otherwise have memleaks.
@@ -106,10 +113,16 @@ class abf_chunker_plotter(object):
         # add the files to stitch
         montage_cmmnd.extend(tmp_files)
         # add the output file name
-        montage_cmmnd.extend(['out.png'])
+        if 'image_name' in kwds.keys():
+            image_name = kwds.pop('image_name')
+        else:
+            image_name = 'out.png'
+        print(image_name)
+        montage_cmmnd.extend([image_name])
 
         # do the command with a subprocess
         subprocess.call(montage_cmmnd)
+
 
         # remove the temporary files
         tmp_files = map(os.path.abspath, tmp_files)
@@ -117,11 +130,11 @@ class abf_chunker_plotter(object):
 
         # display
         # make the display command platform specific
-        import platform
-        out_path = os.path.abspath('out.png')
-        if platform.system() == 'Windows':
-            dsply_cmnd = ['gmdisplay', out_path]
-        else:
-            dsply_cmnd = ['display', out_path]
-        subprocess.call(dsply_cmnd)
-        return os.path.abspath('out.png')
+        # import platform
+        # out_path = os.path.abspath('out.png')
+        # if platform.system() == 'Windows':
+        #     dsply_cmnd = ['gmdisplay', out_path]
+        # else:
+        #     dsply_cmnd = ['display', out_path]
+        # subprocess.call(dsply_cmnd)
+        # return os.path.abspath('out.png')

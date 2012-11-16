@@ -31,6 +31,9 @@ class abf_chunker(object):
         self.set_range((self.left, self.right))
         self.make_chunk_size()
 
+    def rewind(self):
+        self._chunk_counter = 0
+
     def second_to_dp(self, second):
         # second timing ignores num channels of aquisition
         # have to multiply by the row size
@@ -91,7 +94,7 @@ class abf_chunker(object):
         self.range_rows = (self.right - self.left)
         self.make_chunk_size()
 
-    def make_chunk_size(self, nominal_chunksize = 2**21):
+    def make_chunk_size(self, nominal_chunksize = 2**27):
 
         #local copy of base size, for no reason
         base_size = self.base_size

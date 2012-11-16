@@ -3,6 +3,7 @@ from pylab import *
 
 import os
 import sys
+import pdb
 
 abf_path = os.path.join(os.getenv("LABDIR"),
                          'matts_axon18',
@@ -43,6 +44,7 @@ plt.figure()
 while 1:
     try:
         dac_wvf.next_episode()
+        pdb.set_trace()
         d = dac_wvf()[sweep_slc, chn_no]
         plot(d)
     except StopIteration:
