@@ -18,105 +18,144 @@ def find_actv_epchs(abr_header, DAC_num):
         ['nEpochType'][0, DAC_num]
     return np.nonzero(epch_types)[0]
 
-def parse_ep_stim(abf, DAC_num):
-    abf.read_header()
-    abf_header = abf.header
+def get_num_episodes(abf_header):
+    return abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
 
-    # values to compute
-    # sweep_indxs
-    # episode_indxs
-    # epoch_indxs
-    # epoch_levels
-    # epoch_types
-    
+def make_range_array(abf_header, DAC_num):
     num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
     actv_epchs = find_actv_epchs(abf_header, DAC_num)
     num_epchs = len(actv_epchs)
-    DAC_len = abf.total_aq() / abf.num_chans()
-    sweep_len = DAC_len/num_epsds
-    pad = get_dp_pad(abf)
-    epsd_len = sweep_len - 2*pad
+    range_array = np.transpose(np.tile(np.c_[0:num_epsds],
+                                       (num_epchs,1)))
+    return range_array
 
-    eewp = abf_header['ext_epoch_waveform_pulses']
-
-    # epoch levels
-    level_inits = eewp['fEpochInitLevel'][0]\
-        [DAC_num][actv_epchs]
-    level_incrms = eewp['fEpochLevelInc'][0]\
-        [DAC_num][actv_epchs]
-    range_array = np.transpose(np.tile(np.c_[0:num_epsds], (num_epchs,1)))
-    tmp_lvl_incrms = np.tile(level_incrms, (num_epsds,1)) * range_array
-    levels = np.tile(level_inits,(num_epsds,1))+tmp_lvl_incrms
-
-    # epoch durs
-    dur_inits = eewp['lEpochInitDuration'][0]\
-        [DAC_num][actv_epchs]
-    dur_incrms = eewp['lEpochDurationInc'][0]\
-        [DAC_num][actv_epchs]
-    tmp_dur_incrms = np.tile(dur_incrms, (num_epsds,1)) * range_array
-    durs = np.tile(dur_inits,(num_epsds,1))+tmp_dur_incrms
-
-    # epoch types
-    epoch_types = eewp['nEpochType'][0]\
-        [DAC_num][actv_epchs]
-
-    # make sweeps slices
-    lft = np.r_[0:DAC_len+1:sweep_len][:-1]
-    rght = np.r_[0:DAC_len+1:sweep_len][1:]
-    sweep_indxs = c_[lft,rght]
-    sweep_slc_array = np.array([slice(l,r) for l,r in zip(lft, rght)])
-
-    # make epsd slices
-    lft += pad
-    rght = lft+epsd_len
-    epsd_indxs = c_[lft,rght]
-    epsd_slc_array = np.array([slice(l,r) for l,r in zip(lft, rght)])
-
-    #### epoch starts (rel to episode start) ####
-    
-    # assume left points are fixed in
-    # duration changing epochs. I hope this means the maximum duration
-    # for an epoch (over the whole trail) must pass before next epoch
-    # statrs
-    max_dur = np.max(durs,0)
-    max_durs = np.tile(max_dur, (num_epsds,1))
-
-    # accumulate durations (add a zero column) to get starts
-    strts = c_[repeat(0,num_epsds), max_durs[:,0:-1]]
-    epch_strt_indxs = np.add.accumulate(strts,1)
-
-    #### epoch starts (rel to 0) ####
-    for i_epch in range(num_epchs):
-        epch_strt_indxs[:,i_epch]+=epsd_indxs[:,0]
-
-    epch_end_indxs = epch_strt_indxs+durs
-
-    epch_indx_list = []
-    epch_slc_list = []
-    for i_epsd in range(num_epsds):
-        tmp_epsd_list=[]
-        tmp_slc_list=[]
-        for i_epch in range(num_epchs):
-            t = [epch_strt_indxs[i_epsd,i_epch],
-                 epch_end_indxs[i_epsd,i_epch]]
-            tmp_epsd_list.append(t)
-            tmp_slc_list.append(slice(t[0],t[1]))
-        epch_indx_list.append(tmp_epsd_list)
-        epch_slc_list.append(tmp_slc_list)
-    epch_indxs = np.array(epch_indx_list)
-
-    return (sweep_indxs, epsd_indxs, epch_indxs)
-
-def get_dp_pad(abf):
-    SmplsPerEpsd = abf.header['trial_hierarchy']\
+def get_dp_pad(abf_header):
+    SmplsPerEpsd = abf_header['trial_hierarchy']\
         ['lNumSamplesPerEpisode'][0]
-    RowsPerEpsd = (SmplsPerEpsd/abf.num_chans())
+    num_chans = get_num_chans(abf_header)
+    RowsPerEpsd = (SmplsPerEpsd/num_chans)
 
     # FINALLY FIGURED OUT HOW THE PRE AND POST HOLDS ARE
     # DETERMINED, THEY ARE EPISODE LENGTH / 64 (MODULO DIV)
     # from the pclamp guide on LTP of all things
     dp_one_side_pad = int(RowsPerEpsd) / int(64)
     return dp_one_side_pad
+
+def make_epch_levels(abf_header, DAC_num):
+    eewp = abf_header['ext_epoch_waveform_pulses']
+    num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    num_epchs = len(actv_epchs)
+
+    # construct the levels array
+    level_inits = eewp['fEpochInitLevel'][0]\
+        [DAC_num][actv_epchs]
+    level_incrms = eewp['fEpochLevelInc'][0]\
+        [DAC_num][actv_epchs]
+    range_array = make_range_array(abf_header, DAC_num)
+    tmp_lvl_incrms = np.tile(level_incrms, (num_epsds,1)) * range_array
+    levels = np.tile(level_inits,(num_epsds,1))+tmp_lvl_incrms
+    return levels
+
+def make_epch_durs(abf_header, DAC_num):
+    eewp = abf_header['ext_epoch_waveform_pulses']
+    num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    dur_inits = eewp['lEpochInitDuration'][0]\
+        [DAC_num][actv_epchs]
+    dur_incrms = eewp['lEpochDurationInc'][0]\
+        [DAC_num][actv_epchs]
+    range_array = make_range_array(abf_header, DAC_num)
+    tmp_dur_incrms = np.tile(dur_incrms, (num_epsds,1)) * range_array
+    durs = np.tile(dur_inits,(num_epsds,1))+tmp_dur_incrms
+    return (durs)
+
+def get_epch_types(abf_header, DAC_num):
+    # epoch types
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    eewp = abf_header['ext_epoch_waveform_pulses']
+    epoch_types = eewp['nEpochType'][0]\
+        [DAC_num][actv_epchs]
+    return (epoch_types)
+
+def get_num_chans(abf_header):
+    read_chans =  filter(lambda read: \
+        read != -1, abf_header['multi-chan_inf']['nADCSamplingSeq'][0])
+    return len(read_chans)
+
+def get_total_aquired(abf_header):
+    return (abf_header['fid_size_info']['lActualAcqLength'][0])
+
+def get_DAC_len(abf_header):
+    tot_aq = get_total_aquired(abf_header)
+    num_chns = get_num_chans(abf_header)
+    return ( tot_aq / num_chns )
+
+def get_sweep_len(abf_header):
+    DAC_ln = get_DAC_len(abf_header)
+    num_epsds = get_num_episodes(abf_header)
+    return ( DAC_ln / num_epsds )
+
+def get_epsd_len(abf_header):
+    swp_ln = sweep_len(abf_header)
+    pad = get_dp_pad(abf_header)
+    return ( swp_ln - 2*pad )
+
+def make_swp_indxs(abf_header):
+    sweep_len = get_sweep_len(abf_header)
+    DAC_len = get_DAC_len(abf_header)
+    lft = np.r_[0:DAC_len+1:sweep_len][:-1]
+    rght = np.r_[0:DAC_len+1:sweep_len][1:]
+    sweep_indxs = np.c_[lft,rght]
+    return sweep_indxs
+
+def make_epsd_indxs(abf_header):
+    sweep_len = get_sweep_len(abf_header)
+    sweep_indxs = make_swp_indxs(abf_header)
+    epsd_indxs = np.copy(sweep_indxs)
+    pad = get_dp_pad(abf_header)
+    epsd_indxs[:,0] = sweep_indxs[:,0] + pad
+    epsd_len = sweep_len - 2*pad
+    epsd_indxs[:,1] = epsd_indxs[:,0]+epsd_len
+    return epsd_indxs
+
+def make_epch_indxs(abf_header, DAC_num):
+    #### epoch starts (rel to episode start) ####
+    
+    # assume left points are fixed in
+    # duration changing epochs. I hope this means the maximum duration
+    # for an epoch (over the whole trail) must pass before next epoch
+    # statrs
+    durs = make_epch_durs(abf_header, DAC_num)
+    max_dur = np.max(durs,0)
+    num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    max_durs = np.tile(max_dur, (num_epsds,1))
+
+    # accumulate durations (add a zero column) to get starts
+    strts = np.c_[np.repeat(0,num_epsds), max_durs[:,0:-1]]
+    epch_strt_indxs = np.add.accumulate(strts,1)
+
+    #### epoch starts (rel to 0) ####
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    num_epchs = len(actv_epchs)
+
+    epsd_indxs = make_epsd_indxs(abf_header)
+    
+    for i_epch in range(num_epchs):
+        epch_strt_indxs[:,i_epch]+=epsd_indxs[:,0]
+
+    epch_end_indxs = epch_strt_indxs+durs
+
+    epch_indx_list = []
+    for i_epsd in range(num_epsds):
+        tmp_epsd_list=[]
+        for i_epch in range(num_epchs):
+            t = [epch_strt_indxs[i_epsd,i_epch],
+                 epch_end_indxs[i_epsd,i_epch]]
+            tmp_epsd_list.append(t)
+        epch_indx_list.append(tmp_epsd_list)
+    epch_indxs = np.array(epch_indx_list)
+    return epch_indxs
 
 class abf_reader(object):
     def __init__(self, fname):
@@ -275,14 +314,17 @@ class abf_reader(object):
 
     def addGain(self):
         '''method helps with scaling'''
-        self.addGain = self.header['ext_environment_inf']['nTelegraphEnable'][0] * self.header['ext_environment_inf']['fTelegraphAdditGain'][0]
+        self.addGain = self.header['ext_environment_inf']['nTelegraphEnable'][0] * \
+            self.header['ext_environment_inf']['fTelegraphAdditGain'][0]
         self.addGain = np.where(self.addGain==0, 1, self.addGain)
 
     def get_synch_array(self):
         from abf_header_defs import ABF_BLOCKSIZE
         self.fid.seek(self.header['f_structure']['lSynchArrayPtr'][0] * ABF_BLOCKSIZE)
         synch_array_dtype = [('start', np.int32), ('length', np.int32)]
-        synch_array = np.fromfile(self.fid, synch_array_dtype, self.header['f_structure']['lSynchArraySize'])
+        synch_array = np.fromfile(self.fid,
+                                  synch_array_dtype,
+                                  self.header['f_structure']['lSynchArraySize'])
         return synch_array
 
     def sample_rate(self):
@@ -325,4 +367,3 @@ class abf_reader(object):
                                       t_d['hour'],t_d['minute'],\
                                       t_d['second'],t_d['microsecond'])
             return self._file_start_time
-
