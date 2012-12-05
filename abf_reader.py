@@ -86,6 +86,15 @@ def get_num_chans(abf_header):
 def get_total_aquired(abf_header):
     return (abf_header['fid_size_info']['lActualAcqLength'][0])
 
+def sample_rate(header):
+    # sample interval in microseconds, so hertz are * 10e6
+    sample_rate = \
+        1 * 1000000\
+        /header['trial_hierarchy']['fADCSampleInterval']\
+        /header['trial_hierarchy']['nADCNumChannels']
+    sample_rate = sample_rate[0]
+    return sample_rate
+
 def get_DAC_len(abf_header):
     tot_aq = get_total_aquired(abf_header)
     num_chns = get_num_chans(abf_header)
