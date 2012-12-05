@@ -79,8 +79,19 @@ class abf_chunker_plotter(object):
                               top = nrgtop, bottom = nrgbtm, hspace = 0.05)
             for cell_num, cell in enumerate(cell_list):
                 data = d[:,cell]
-                
                 ax = plt.subplot(gs_cells[cell_num, 0])
+                if 'yscale' in kwds.keys():
+                    ybar = kwds.pop('yscale')
+                    print('ybar')
+                    print(ybar)
+                    ax.plot([0,0],[0,ybar], color = 'red', linewidth = 1)
+                if 'xscale' in kwds.keys():
+                    xbar = kwds.pop('xscale')*\
+                        self._abf_chunker.abr.sample_rate()
+                    print('xbar')
+                    print(xbar)
+                    ax.plot([0,xbar],[0,0], color = 'red', linewidth = 1)
+
                 ax.set_axis_off()
                 ax.plot(data, linewidth = self.linethickness, color = 'black')
                 ax.set_ylim(self._ylim['cells'][cell_num])
