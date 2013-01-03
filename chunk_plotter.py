@@ -82,16 +82,20 @@ class abf_chunker_plotter(object):
                 ax = plt.subplot(gs_cells[cell_num, 0])
                 if 'yscale' in kwds.keys():
                     ybar = kwds.pop('yscale')
-                    print('ybar')
-                    print(ybar)
-                    ax.plot([0,0],[0,ybar], color = 'red', linewidth = 1)
+                    ytop = self._ylim['cells'][cell_num][1]
+                    ybttm = self._ylim['cells'][cell_num][1]
+                    ax.plot([0,0],[ytop-ybar,ytop], color = 'red', linewidth = 1)
+                    ax.text(0,ytop, "%s %s" % (ybar, "mV"), ha = 'left', va = 'top')
                 if 'xscale' in kwds.keys():
-                    xbar = kwds.pop('xscale')*\
-                        self._abf_chunker.abr.sample_rate()
-                    print('xbar')
-                    print(xbar)
-                    ax.plot([0,xbar],[0,0], color = 'red', linewidth = 1)
-
+                    xbar_sec = kwds.pop('xscale')
+                    xbar_dp = xbar_sec * self._abf_chunker.abr.sample_rate()
+                    ytop = self._ylim['cells'][cell_num][1]
+                    ybttm = self._ylim['cells'][cell_num][0]
+                    yrange = ytop - ybttm
+                    yplc = ybttm + (yrange * 0.8)
+                    ax.plot([0,xbar_dp],[yplc,yplc], color = 'red', linewidth = 1)
+                    ax.text(xbar_dp,yplc, "%s %s" % (xbar_sec, "sec"),
+                            ha = 'right', va = 'top')
                 ax.set_axis_off()
                 ax.plot(data, linewidth = self.linethickness, color = 'black')
                 ax.set_ylim(self._ylim['cells'][cell_num])

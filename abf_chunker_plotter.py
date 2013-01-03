@@ -40,6 +40,10 @@ def sneurgrms(abrf):
 def syrng(chnk_plter, cells, neurgrms, **kwargs):
     if 'cell_lms' in kwargs.keys():
         cell_lms = kwargs.pop('cell_lms')
+    elif 'cell_anchors' and 'cell_spans' in kwargs.keys():
+        anchrs = kwargs.pop('cell_anchors')
+        spns = kwargs.pop('cell_spans')
+        cell_lms = [(anchr, anchr+spn) for anchr, spn in zip(anchrs, spns)]
     else:
         special_cell = input('special cells yrange? 1 for yes\n')
         if special_cell==1:
