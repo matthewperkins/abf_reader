@@ -19,10 +19,10 @@ def find_actv_epchs(abr_header, DAC_num):
     return np.nonzero(epch_types)[0]
 
 def get_num_episodes(abf_header):
-    return abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    return abf_header['fid_size_info']['lActualEpisodes'][0]
 
 def make_range_array(abf_header, DAC_num):
-    num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    num_epsds = get_num_episodes(abf_header)
     actv_epchs = find_actv_epchs(abf_header, DAC_num)
     num_epchs = len(actv_epchs)
     range_array = np.transpose(np.tile(np.c_[0:num_epsds],
@@ -43,7 +43,7 @@ def get_dp_pad(abf_header):
 
 def make_epch_levels(abf_header, DAC_num):
     eewp = abf_header['ext_epoch_waveform_pulses']
-    num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    num_epsds = get_num_episodes(abf_header)
     actv_epchs = find_actv_epchs(abf_header, DAC_num)
     num_epchs = len(actv_epchs)
 
@@ -59,7 +59,7 @@ def make_epch_levels(abf_header, DAC_num):
 
 def make_epch_durs(abf_header, DAC_num):
     eewp = abf_header['ext_epoch_waveform_pulses']
-    num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    num_epsds = get_num_episodes(abf_header)
     actv_epchs = find_actv_epchs(abf_header, DAC_num)
     dur_inits = eewp['lEpochInitDuration'][0]\
         [DAC_num][actv_epchs]
@@ -137,7 +137,7 @@ def make_epch_indxs(abf_header, DAC_num):
     # statrs
     durs = make_epch_durs(abf_header, DAC_num)
     max_dur = np.max(durs,0)
-    num_epsds = abf_header['trial_hierarchy']['lEpisodesPerRun'][0]
+    num_epsds = get_num_episodes(abf_header)
     max_durs = np.tile(max_dur, (num_epsds,1))
 
     # accumulate durations (add a zero column) to get starts
@@ -181,7 +181,7 @@ class abf_reader(object):
         self.addGain()
         self._chan_holder = -1
         self._num_episodes = \
-            self.header['trial_hierarchy']['lEpisodesPerRun'][0]
+            get_num_episodes(self.header)
 
         # rewrite the ADC units into a convience variable, trunc to 2 chars
         self._ADC_Units = \
@@ -334,7 +334,11 @@ class abf_reader(object):
         synch_array = np.fromfile(self.fid,
                                   synch_array_dtype,
                                   self.header['f_structure']['lSynchArraySize'])
-        return synch_array
+        sl = []
+        for strt, length in synch_array:
+            sl.append([strt, length])
+        sa = np.array(sl)
+        return sa
 
     def sample_rate(self):
         try:
