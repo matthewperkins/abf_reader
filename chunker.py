@@ -63,16 +63,21 @@ class abf_chunker(object):
         # style points to matplotlib, yay free software
 
         if width is None and iterable(left):
+            # this needs some clean up
             if map(type, left)==[int]*2:
                 self.left, self.right = left
             elif map(type, left)==[float]*2:
-                #if floats are btwn 0-1 inclsv - assume they are fractions of x range
+                #if floats are btwn 0-1 inclsv - assume they are
+                #fractions of x range
                 tested_prcnt_rng = filter(lambda a: a>=0 and a<=1, left)
                 if len(tested_prcnt_rng)==2:
                     self.left = int(self.nrows * left[0])
                     self.right = int(self.nrows * left[1])
                 #if range is floats and seconds true, 
                 elif seconds==True:
+                    # check to make sure the bounds in seconds are pos.
+                    # neg values will read the whol file
+                    for sec in left: assert sec>=0, "seconds bounds must be greater than zero"
                     self.left = self.second_to_row(left[0])
                     self.right = self.second_to_row(left[1])
                 else:
