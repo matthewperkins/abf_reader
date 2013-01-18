@@ -73,6 +73,9 @@ class abf_chunker(object):
                     self.right = int(self.nrows * left[1])
                 #if range is floats and seconds true, 
                 elif seconds==True:
+                    # check to make sure the bounds in seconds are pos.
+                    # neg values will read the whol file
+                    for sec in left: assert sec>=0, "seconds bounds must be greater than zero"
                     self.left = self.second_to_row(left[0])
                     self.right = self.second_to_row(left[1])
                 else:
