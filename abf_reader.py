@@ -178,6 +178,9 @@ class abf_reader(object):
         self.path_file = self.path + os.sep + self.fname
         self.fid = file(self.path_file, 'rb')
         self.read_header()
+
+        # make sure that I have a compatible abf version
+        self.verify_version()
         self.addGain()
         self._chan_holder = -1
         self._num_episodes = \
@@ -193,6 +196,11 @@ class abf_reader(object):
             self.base_size = 4 * self.num_chans() # 4byte size per float
         elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
             self.base_size = 2 * self.num_chans() # 2byte size per int
+
+    def verify_version(self):
+        FVerNum = self.header['fid_size_info']['fFileVersionNumber']
+        ErrMsg = "current abf is version %f, this 'prog' only reads abf 1.8" % (FVerNum)
+        assert (FVerNum>=1.8) & (FVerNum<2.0), ErrMsg
 
     def hdr_offset(self):
         from abf_header_defs import ABF_BLOCKSIZE
