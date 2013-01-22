@@ -82,12 +82,14 @@ class abf_chunker(object):
                     raise ValueError('if using floats in range, I am \
                     guessing you want to specify and range by percent,\
                     your numbers must be btwn 0, 1')
-        if type(width)==int:
+        elif type(width)==int and type(left)==int:
+            assert seconds!=True, 'getting mixed messages! are these ranges seconds? or what?'
             self.left = left
             self.right = left+width
-        if type(width)==float and 0<=width<=1:
-            self.left = left
-            self.right = left + int(self.nrows*width)
+        elif type(width)==float and type(left)==float:
+            assert seconds==True, 'getting mixed messages! are these ranges seconds or what?'
+            self.left = self.second_to_row(left)
+            self.right = self.second_to_row(left+width)
 
         # set right limit to max, if greater than max.
         if self.right > self.nrows:
