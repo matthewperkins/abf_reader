@@ -90,6 +90,8 @@ class abf_chunker(object):
             assert seconds==True, 'getting mixed messages! are these ranges seconds or what?'
             self.left = self.second_to_row(left)
             self.right = self.second_to_row(left+width)
+        else:
+            raise TypeError('Just use floats you asswhole')
 
         # set right limit to max, if greater than max.
         if self.right > self.nrows:
