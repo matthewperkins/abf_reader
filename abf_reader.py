@@ -3,7 +3,12 @@ import os
 import numpy as np
 from tempfile import mkdtemp
 
-    
+def get_digi_train_period(abr_header):
+    digi_trains = np.where(abr_header['ext_epoch_waveform_pulses']\
+                 ['nDigitalTrainValue'][0]==4)[0]
+    if not np.size(digi_trains)==0:
+        return (abr_header['ext_multi-chan_inf']['lEpochPulsePeriod'][0])
+
 def dac_step(level, leng):
     from numpy import tile
     return tile(lvl, leng)
