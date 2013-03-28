@@ -59,10 +59,16 @@ class abf_chunker_plotter(object):
         nrgbtm = 0
 
         #if there is a filetype keyword, pop and set
-        if 'filetype' in kwds.keys():
-            filetype = kwds.pop('filetype')
+        if 'image_type' in kwds.keys():
+            image_type = kwds.pop('image_type')
         else:
-            filetype = 'png'
+            image_type = 'png'
+
+        #if there is a image_name keyword, pop and set
+        if 'image_name' in kwds.keys():
+            image_name = kwds.pop('image_name')
+        else:
+            image_name = 'tmp'
         
         import subprocess
         tmp_files = []
@@ -94,7 +100,7 @@ class abf_chunker_plotter(object):
                 ax.set_xlim((0,len(d)))
             print(fig.get_size_inches())
             del d
-            filname = "%s_%03d.%s" % ('tmp', i, filetype)
+            filname = "%s_%03d.%s" % ('tmp', i, image_type)
             print(filname)
             tmp_files.append(filname)
             fig.savefig(filname, dpi = dpi)
@@ -113,10 +119,7 @@ class abf_chunker_plotter(object):
         # add the files to stitch
         montage_cmmnd.extend(tmp_files)
         # add the output file name
-        if 'image_name' in kwds.keys():
-            image_name = kwds.pop('image_name')
-        else:
-            image_name = 'out.png'
+        image_name = "%s.%s" % (image_name, image_type)
         print(image_name)
         montage_cmmnd.extend([image_name])
 
