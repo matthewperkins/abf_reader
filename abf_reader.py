@@ -3,6 +3,7 @@ import os
 import numpy as np
 from tempfile import mkdtemp
 
+    
 def dac_step(level, leng):
     from numpy import tile
     return tile(lvl, leng)
@@ -12,6 +13,11 @@ def dac_ramp(rampto, startat, leng):
     from scipy.interpolate import interp1d
     # make interpolation function, prob better way
     return (interp1d([0,leng], [startat,rampto]))
+
+def are_epochs_ramps(abr_header, DAC_num):
+    epoch_types =\
+        abr_header['ext_epoch_waveform_pulses']['nEpochType'][0][DAC_num]
+    return (epoch_types==2)
 
 def find_actv_epchs(abr_header, DAC_num):
     epch_types = abr_header['ext_epoch_waveform_pulses']\
@@ -128,7 +134,7 @@ def make_epsd_indxs(abf_header):
     epsd_indxs[:,1] = epsd_indxs[:,0]+epsd_len
     return epsd_indxs
 
-def make_epch_indxs(abf_header, DAC_num):
+def make_epch_indxs(abf_header, DAC_num, nrmd = False):
     #### epoch starts (rel to episode start) ####
     
     # assume left points are fixed in
@@ -149,9 +155,14 @@ def make_epch_indxs(abf_header, DAC_num):
     num_epchs = len(actv_epchs)
 
     epsd_indxs = make_epsd_indxs(abf_header)
-    
+
     for i_epch in range(num_epchs):
-        epch_strt_indxs[:,i_epch]+=epsd_indxs[:,0]
+        if nrmd=='sweep':
+            epch_strt_indxs[:,i_epch] += (epsd_indxs[0,0])
+        elif nrmd=='episode':
+            pass
+        else:
+            epch_strt_indxs[:,i_epch]+=epsd_indxs[:,0]
 
     epch_end_indxs = epch_strt_indxs+durs
 
