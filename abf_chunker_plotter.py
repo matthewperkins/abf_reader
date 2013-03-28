@@ -65,12 +65,33 @@ def sfigsz(chnk_plter, **kwargs):
     chnk_plter.set_fig_size_inches(fig_sz)
 
 def main(abf_path, **kwargs):
+                  
     # make abf reader instance
     abrf = abr(abf_path)
     # print channel names, for sanity
     abrf.chan_names()
     print('\n')
     # set up the abf_chunker
+
+    # lets set some defaults:
+    options={'cells':range(abrf.num_chans()),
+             'neurgrms':[],
+             'dpi':300,
+             'srange':(0.,100.),
+             'lnwdth':0.3,
+             'cell_lms':[(-80,30)]*abrf.num_chans(),
+             'neurgrm_lms':[(-3,3)*0],
+             'fig_sz':(10,8),
+             'filetype':'png'}
+
+    for key in kwargs.keys():
+        if key=='cells':
+            if 'cell_lms' not in kwargs.keys():
+                options['cell_lms'] = [(-80,30)]*len(kwargs['cells'])
+        if key=='neurgrms':
+            if 'neurgrm_lms' not in kwargs.keys():
+                options['neurgrm_lms'] = [(-3,3)]*len(kwargs['cells'])
+        options[key] = kwargs[key]
     # give chunker an abr 
     abf_chunker = chunker.abf_chunker(abrf)
 
@@ -78,40 +99,40 @@ def main(abf_path, **kwargs):
     chnk_plter = abf_chunker_plotter(abf_chunker)
 
     # set line width
-    slinwidth(chnk_plter, **kwargs)
+    slinwidth(chnk_plter, **options)
     
     # select cells
-    if 'cells' in kwargs.keys():
-        cells = kwargs.pop('cells')
+    if 'cells' in options.keys():
+        cells = options.pop('cells')
     else:
-        cells = scell(abrf)
+        cells = scells(abrf)
 
     # select neurgrams
-    if 'neurgrms' in kwargs.keys():
-        neurgrms = kwargs.pop('neurgrms')
+    if 'neurgrms' in options.keys():
+        neurgrms = options.pop('neurgrms')
     else:
         neurgrms = sneurgrms(abrf)
 
     # set yrng
-    syrng(chnk_plter, cells, neurgrms, **kwargs)
+    syrng(chnk_plter, cells, neurgrms, **options)
 
     # set xrange in seconds
-    sxrange(abf_chunker, **kwargs)
+    sxrange(abf_chunker, **options)
 
     # set fig size
-    sfigsz(chnk_plter, **kwargs)
+    sfigsz(chnk_plter, **options)
 
     # get dpi
-    if 'dpi' in kwargs.keys():
-        dpi = kwargs.pop('dpi')
+    if 'dpi' in options.keys():
+        dpi = options.pop('dpi')
     else:
         dpi = input('what dpi?\n')
 
-    chnk_plter.plot(dpi, cells, neurgrms, **kwargs)
+    chnk_plter.plot(dpi, cells, neurgrms, **options)
     # changes:
     
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1])
 
 # debug stuff
     
