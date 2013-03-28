@@ -545,3 +545,5 @@ class abf_reader(object):
                                       t_d['second'],t_d['microsecond'])
             return self._file_start_time
 
+    def stop_watch_time(self):
+        return int(self.header['fid_size_info']['lStopwatchTime'][0])
