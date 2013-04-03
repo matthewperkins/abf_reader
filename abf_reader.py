@@ -545,5 +545,43 @@ class abf_reader(object):
                                       t_d['second'],t_d['microsecond'])
             return self._file_start_time
 
+    def _reopen_editing(self):
+        self.fid.close()
+        self.fid = file(os.path.join(self.path, self.fname), 'r+b')
+
+    def _reopen_reading(self):
+        self.fid.close()
+        self.fid = file(os.path.join(self.path, self.fname), 'rb')
+
+    def set_start_time(self, time):
+        from math import floor
+        self._reopen_editing()
+        from datetime import datetime
+        # have to create string like yyyymmdd
+        assert type(time) == type(datetime.now()), "Only python datetime objects accepted here"
+        # have a time date object, good
+        yyyymmdd = time.strftime("%Y%m%d")
+        lFileStartDate = np.int32(yyyymmdd)
+
+        # 'lFileStartTime is in seconds. find the number of
+        # seconds since the start of day
+        day_start = datetime(time.year, time.month, time.day)
+        FileStartTime = floor((time-day_start).total_seconds())
+        lFileStartTime = np.int32(FileStartTime)
+
+        # 'nFileStartMillisecs'
+        FileStartMillisecs = ((time-day_start).total_seconds()) % 1 * 1000
+        nFileStartMillisecs = np.int16(FileStartMillisecs)
+
+        # change the values of the header, and write entire header back to file
+        self.header['fid_size_info']['lFileStartDate'][0] = lFileStartDate
+        self.header['fid_size_info']['lFileStartTime'][0] = lFileStartTime
+        self.header['environment_inf']['nFileStartMillisecs'][0] = nFileStartMillisecs
+
+        self.fid.seek(0)
+        self.fid.write(self.header)
+        self.fid.flush()
+        self._reopen_reading()
+
     def stop_watch_time(self):
         return int(self.header['fid_size_info']['lStopwatchTime'][0])
