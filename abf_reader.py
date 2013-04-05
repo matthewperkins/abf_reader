@@ -407,3 +407,10 @@ class abf_reader(object):
 
     def stop_watch_time(self):
         return int(self.header['fid_size_info']['lStopwatchTime'][0])
+
+    def write_header(self, AppendName='.abfheader'):
+        name = self.fname.split('.')[0]
+        f = file(name+AppendName, 'wb')
+        f.write(self.header)
+        f.flush
+        f.close
