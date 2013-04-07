@@ -213,12 +213,11 @@ class epoch(waveform):
             self.__dict__['level'] = types.MethodType(dac_ramp, self)
 
         self._th = self._abr.header['trial_hierarchy']
-        self._num_episodes = self._th['lEpisodesPerRun'][0]
 
     def next(self):
         try:
             self._epsd_num += 1
-            if (self._epsd_num+1>self._num_episodes):
+            if (self._epsd_num+1>self._abr._num_episodes):
                 raise StopIteration            
         except AttributeError:
             self._epsd_num = 0
@@ -313,7 +312,6 @@ class abf_epsd_cnstrctr(object):
         self._abr = abf_reader
         self._th = self._abr.header['trial_hierarchy']
         self._eewp = self._abr.header['ext_epoch_waveform_pulses']
-        self._num_episodes = self._th['lEpisodesPerRun'][0]
         
     def _smpls_per_epsd(self):
         SmplsPerEpsd = self._th['lNumSamplesPerEpisode'][0]
@@ -322,13 +320,10 @@ class abf_epsd_cnstrctr(object):
     def __iter__(self):
         return self
 
-    def _num_episodes(self):
-        return (self._th['lEpisodesPerRun'])
-
     def next(self):
         try:
             self._current_epsd += 1
-            if (self._current_epsd+1>self._num_episodes):
+            if (self._current_epsd+1>self._abr._num_episodes):
                 raise StopIteration            
         except AttributeError:
             self._current_epsd = 0
@@ -352,7 +347,7 @@ class abf_reader(object):
         self.addGain()
         self._chan_holder = -1
         self._num_episodes = \
-            self.header['trial_hierarchy']['lEpisodesPerRun'][0]
+            self._abr.header['fid_size_info']['lActualEpisodes'][0]
 
         # rewrite the ADC units into a convience variable, trunc to 2 chars
         self._ADC_Units = \
