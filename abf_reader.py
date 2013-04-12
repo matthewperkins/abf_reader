@@ -3,21 +3,235 @@ import os
 import numpy as np
 from tempfile import mkdtemp
 
+def get_digi_train_period(abr_header):
+    digi_trains = np.where(abr_header['ext_epoch_waveform_pulses']\
+                 ['nDigitalTrainValue'][0]==4)[0]
+    if not np.size(digi_trains)==0:
+        return (abr_header['ext_multi-chan_inf']['lEpochPulsePeriod'][0])
+
+def dac_step(level, leng):
+    from numpy import tile
+    return tile(lvl, leng)
+
+def dac_ramp(rampto, startat, leng):
+    from numpy import r_
+    from scipy.interpolate import interp1d
+    # make interpolation function, prob better way
+    return (interp1d([0,leng], [startat,rampto]))
+
+def are_epochs_ramps(abr_header, DAC_num):
+    epoch_types =\
+        abr_header['ext_epoch_waveform_pulses']['nEpochType'][0][DAC_num]
+    return (epoch_types==2)
+
+def find_actv_epchs(abr_header, DAC_num):
+    epch_types = abr_header['ext_epoch_waveform_pulses']\
+        ['nEpochType'][0, DAC_num]
+    return np.nonzero(epch_types)[0]
+
+def get_num_episodes(abf_header):
+    return abf_header['fid_size_info']['lActualEpisodes'][0]
+
+def make_range_array(abf_header, DAC_num):
+    num_epsds = get_num_episodes(abf_header)
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    num_epchs = len(actv_epchs)
+    range_array = np.transpose(np.tile(np.c_[0:num_epsds],
+                                       (num_epchs,1)))
+    return range_array
+
+def get_dp_pad(abf_header):
+    SmplsPerEpsd = abf_header['trial_hierarchy']\
+        ['lNumSamplesPerEpisode'][0]
+    num_chans = get_num_chans(abf_header)
+    RowsPerEpsd = (SmplsPerEpsd/num_chans)
+
+    # FINALLY FIGURED OUT HOW THE PRE AND POST HOLDS ARE
+    # DETERMINED, THEY ARE EPISODE LENGTH / 64 (MODULO DIV)
+    # from the pclamp guide on LTP of all things
+    dp_one_side_pad = int(RowsPerEpsd) / int(64)
+    return dp_one_side_pad
+
+def make_epch_levels(abf_header, DAC_num):
+    eewp = abf_header['ext_epoch_waveform_pulses']
+    num_epsds = get_num_episodes(abf_header)
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    num_epchs = len(actv_epchs)
+
+    # construct the levels array
+    level_inits = eewp['fEpochInitLevel'][0]\
+        [DAC_num][actv_epchs]
+    level_incrms = eewp['fEpochLevelInc'][0]\
+        [DAC_num][actv_epchs]
+    range_array = make_range_array(abf_header, DAC_num)
+    tmp_lvl_incrms = np.tile(level_incrms, (num_epsds,1)) * range_array
+    levels = np.tile(level_inits,(num_epsds,1))+tmp_lvl_incrms
+    return levels
+
+def make_epch_durs(abf_header, DAC_num):
+    eewp = abf_header['ext_epoch_waveform_pulses']
+    num_epsds = get_num_episodes(abf_header)
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    dur_inits = eewp['lEpochInitDuration'][0]\
+        [DAC_num][actv_epchs]
+    dur_incrms = eewp['lEpochDurationInc'][0]\
+        [DAC_num][actv_epchs]
+    range_array = make_range_array(abf_header, DAC_num)
+    tmp_dur_incrms = np.tile(dur_incrms, (num_epsds,1)) * range_array
+    durs = np.tile(dur_inits,(num_epsds,1))+tmp_dur_incrms
+    return (durs)
+
+def get_epch_types(abf_header, DAC_num):
+    # epoch types
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    eewp = abf_header['ext_epoch_waveform_pulses']
+    epoch_types = eewp['nEpochType'][0]\
+        [DAC_num][actv_epchs]
+    return (epoch_types)
+
+def get_num_chans(abf_header):
+    read_chans =  filter(lambda read: \
+        read != -1, abf_header['multi-chan_inf']['nADCSamplingSeq'][0])
+    return len(read_chans)
+
+def get_total_aquired(abf_header):
+    return (abf_header['fid_size_info']['lActualAcqLength'][0])
+
+def sample_rate(header):
+    # sample interval in microseconds, so hertz are * 10e6
+    sample_rate = \
+        1 * 1000000\
+        /header['trial_hierarchy']['fADCSampleInterval']\
+        /header['trial_hierarchy']['nADCNumChannels']
+    sample_rate = sample_rate[0]
+    return sample_rate
+
+def get_DAC_len(abf_header):
+    tot_aq = get_total_aquired(abf_header)
+    num_chns = get_num_chans(abf_header)
+    return ( tot_aq / num_chns )
+
+def get_sweep_len(abf_header):
+    DAC_ln = get_DAC_len(abf_header)
+    num_epsds = get_num_episodes(abf_header)
+    return ( DAC_ln / num_epsds )
+
+def get_epsd_len(abf_header):
+    swp_ln = sweep_len(abf_header)
+    pad = get_dp_pad(abf_header)
+    return ( swp_ln - 2*pad )
+
+def make_swp_indxs(abf_header):
+    sweep_len = get_sweep_len(abf_header)
+    DAC_len = get_DAC_len(abf_header)
+    lft = np.r_[0:DAC_len+1:sweep_len][:-1]
+    rght = np.r_[0:DAC_len+1:sweep_len][1:]
+    sweep_indxs = np.c_[lft,rght]
+    return sweep_indxs
+
+def make_epsd_indxs(abf_header):
+    sweep_len = get_sweep_len(abf_header)
+    sweep_indxs = make_swp_indxs(abf_header)
+    epsd_indxs = np.copy(sweep_indxs)
+    pad = get_dp_pad(abf_header)
+    epsd_indxs[:,0] = sweep_indxs[:,0] + pad
+    epsd_len = sweep_len - 2*pad
+    epsd_indxs[:,1] = epsd_indxs[:,0]+epsd_len
+    return epsd_indxs
+
+def make_epch_indxs(abf_header, DAC_num, nrmd = False):
+    #### epoch starts (rel to episode start) ####
+    
+    # assume left points are fixed in
+    # duration changing epochs. I hope this means the maximum duration
+    # for an epoch (over the whole trail) must pass before next epoch
+    # statrs
+    durs = make_epch_durs(abf_header, DAC_num)
+    max_dur = np.max(durs,0)
+    num_epsds = get_num_episodes(abf_header)
+    max_durs = np.tile(max_dur, (num_epsds,1))
+
+    # accumulate durations (add a zero column) to get starts
+    strts = np.c_[np.repeat(0,num_epsds), max_durs[:,0:-1]]
+    epch_strt_indxs = np.add.accumulate(strts,1)
+
+    #### epoch starts (rel to 0) ####
+    actv_epchs = find_actv_epchs(abf_header, DAC_num)
+    num_epchs = len(actv_epchs)
+
+    epsd_indxs = make_epsd_indxs(abf_header)
+
+    for i_epch in range(num_epchs):
+        if nrmd=='sweep':
+            epch_strt_indxs[:,i_epch] += (epsd_indxs[0,0])
+        elif nrmd=='episode':
+            pass
+        else:
+            epch_strt_indxs[:,i_epch]+=epsd_indxs[:,0]
+
+    epch_end_indxs = epch_strt_indxs+durs
+
+    epch_indx_list = []
+    for i_epsd in range(num_epsds):
+        tmp_epsd_list=[]
+        for i_epch in range(num_epchs):
+            t = [epch_strt_indxs[i_epsd,i_epch],
+                 epch_end_indxs[i_epsd,i_epch]]
+            tmp_epsd_list.append(t)
+        epch_indx_list.append(tmp_epsd_list)
+    epch_indxs = np.array(epch_indx_list)
+    return epch_indxs
+
 class abf_reader(object):
     def __init__(self, fname):
         from abf_header_dtype import abf_header_dtype
         self._headr_struct = abf_header_dtype
         self.fname = os.path.basename(fname)
-        self.path = os.path.dirname(os.path.abspath(fname))
+        if os.path.isabs(fname):
+            self.path = os.path.dirname(fname)
+        else:
+            self.path = os.path.dirname(os.path.abspath(fname))
         self.path_file = self.path + os.sep + self.fname
         self.fid = file(self.path_file, 'rb')
         self.read_header()
+
+        # make sure that I have a compatible abf version
+        self.verify_version()
         self.addGain()
         self._chan_holder = -1
+        self._num_episodes = \
+            get_num_episodes(self.header)
 
+        # rewrite the ADC units into a convience variable, trunc to 2 chars
+        self._ADC_Units = \
+            np.array(self.header['multi-chan_inf']['sADCUnits'][0],
+                     dtype = '|S2')
+        # make an atomic size, so that data can be broken up with out
+        # segmenting cols(channels)
+        if self.header['f_structure']['nDataFormat'][0]==1: #float data
+            self.base_size = 4 * self.num_chans() # 4byte size per float
+        elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
+            self.base_size = 2 * self.num_chans() # 2byte size per int
+
+    def verify_version(self):
+        FVerNum = self.header['fid_size_info']['fFileVersionNumber']
+        ErrMsg = "current abf is version %f, this 'prog' only reads abf 1.8" % (FVerNum)
+        assert (FVerNum>=1.8) & (FVerNum<2.0), ErrMsg
+
+    def hdr_offset(self):
+        from abf_header_defs import ABF_BLOCKSIZE
+        return ((self.header['f_structure']['lDataSectionPtr'] * ABF_BLOCKSIZE)[0])
+
+    def total_aq(self):
+        return (self.header['fid_size_info']['lActualAcqLength'][0])
+
+    def actv_dacs(self):
+        return (np.nonzero(self.header['ext_epoch_waveform_pulses']\
+            ['nWaveformEnable'][0])[0])
+        
     # custom get and set state allow pickle to handel the pickleing of
     # object with out choking on file
-        
+
     def __getstate__(self):
         odict = self.__dict__.copy() # copy the dict since we change it
         del odict['fid']              # remove filehandle entry
@@ -74,46 +288,49 @@ class abf_reader(object):
         #rstrip removes the trailing white space
         return chans[sampled_chans[chan_no]].rstrip()
 
-    def read_data(self):
+    def read_data(self, **kwds):
         '''reads multiplexed data from abfs into an array'''
-        ## want to have this method return an iterator that provides data until its out.
-        ## have to use data from the header to do this
         ## the times that are asso with discontinuous recording are wonky
-        from numpy import fromfile, float32, int16, memmap, float
-        from abf_header_defs import ABF_BLOCKSIZE
-        offset = self.header['f_structure']['lDataSectionPtr'] * ABF_BLOCKSIZE
-        total_aq = self.header['fid_size_info']['lActualAcqLength'][0]
-        numchans = self.header['trial_hierarchy']['nADCNumChannels'][0]
-        howmanyreads = self.header['trial_hierarchy']['lNumSamplesPerEpisode'][0] \
-            *  self.header['fid_size_info']['lActualEpisodes'][0] / numchans
-        read_seq = self._read_seq()
-        ncols = len(read_seq)
-        nrows = total_aq/numchans
-        reads = map(lambda read: 'adc_' + str(read), read_seq)
+        from numpy import float32, int16, memmap
 
+        # prep to establish order of array in memory
+        from abf_header_defs import ABF_BLOCKSIZE
+        offset = self.hdr_offset()
+        total_aq = self.total_aq()
+        numchans = self.num_chans()
+        ncols = numchans
+        nrows = total_aq/numchans
+
+        # handle optional kwds, for subsetting data
+        # start_row and needs to be transulated into byte offset
+        # other kwds, num_rows or stop_row do not
+        if 'start_row' in kwds.keys():
+            start_row = kwds.pop('start_row')
+            offset += (start_row * self.base_size)
+        if 'num_rows' in kwds.keys():
+            nrows = kwds.pop('num_rows')
+        if 'stop_row' in kwds.keys():
+            # check if start_row is beginning
+            if offset!=self.hdr_offset:
+                nrows = stop_row - start_row
+            elif offset==self.hdr_offset:
+                nrows = stop_row
+         
         #see if is float data
         if self.header['f_structure']['nDataFormat'][0]==1: 
-            data = memmap(self.fid, dtype = float32, shape = (nrows,ncols), offset = offset)
+            data = memmap(self.fid, dtype = float32,
+                          shape = (nrows,ncols), offset = offset)
+            data = np.copy(data)
+            return data
 
         #see if is integer data
-        elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
-            data = memmap(self.fid, dtype = int16, shape = (nrows,ncols), mode = 'r',offset = offset)
-
-        # make a writeable temporarory memory map for helping? with memusage?,
-        tmp_dir = mkdtemp()
-        tmp_map_name = os.path.join(tmp_dir, '_tmp_' + self.fname.split(os.extsep)[0])
-        self.mm = memmap(tmp_map_name, dtype = float32, shape = (nrows,ncols), mode = 'w+')
-        self.mm[:] = data[:].astype(np.float32)
-
-        # delete the memory map to flush from file
-        del self.mm
-
-        # then reload?
-        self.mm = memmap(tmp_map_name, dtype = float32, shape = (nrows,ncols), mode = 'r+')
-
-        # now do some scaling
-        self.mm = self.scale_int_data(self.mm)
-        return self.mm
+        elif self.header['f_structure']['nDataFormat'][0]==0: 
+            unscl_data = memmap(self.fid, dtype = int16,
+                          shape = (nrows,ncols),
+                mode = 'r',offset = offset)
+            # now scale data and return
+            unscl_data = unscl_data.astype(float32)
+            return (self.scale_int_data(unscl_data))
 
     def scale_int_data(self, data):
         for indx, chan in enumerate(self._read_seq()):
@@ -130,44 +347,22 @@ class abf_reader(object):
 
     def addGain(self):
         '''method helps with scaling'''
-        self.addGain = self.header['ext_environment_inf']['nTelegraphEnable'][0] * self.header['ext_environment_inf']['fTelegraphAdditGain'][0]
+        self.addGain = self.header['ext_environment_inf']['nTelegraphEnable'][0] * \
+            self.header['ext_environment_inf']['fTelegraphAdditGain'][0]
         self.addGain = np.where(self.addGain==0, 1, self.addGain)
 
     def get_synch_array(self):
         from abf_header_defs import ABF_BLOCKSIZE
         self.fid.seek(self.header['f_structure']['lSynchArrayPtr'][0] * ABF_BLOCKSIZE)
         synch_array_dtype = [('start', np.int32), ('length', np.int32)]
-        synch_array = np.fromfile(self.fid, synch_array_dtype, self.header['f_structure']['lSynchArraySize'])
-        return synch_array
-
-    def get_dp_pad(self):
-        #the total number of data points aquired minus the number of
-        #data points defined in the epochs gives the padding data in
-        #the file, half of this pad is at the beginning of the file,
-        #and half at the end
-
-        #because epochs can be defined as off, meaning no data are
-        #aquired, have to filter epochs by epoch type != 0, meaning
-        #data are aquired.
-        self._actv_wv = np.nonzero(self.header['ext_epoch_waveform_pulses']['nWaveformEnable'][0])[0]
-        if len(self._actv_wv)>1:
-            raise IndexError('this is currently\
-                              not ready to handle\
-                              two active waveforms')
-        else:
-            self._actv_wv = self._actv_wv[0]
-
-        dp_in_epochs = self.header['ext_epoch_waveform_pulses']\
-                     ['lEpochInitDuration'][0][self._actv_wv].sum()
-
-                #this is the subtraction
-        self._dp_pad =\
-        (self.header['trial_hierarchy']['lNumSamplesPerEpisode'][0] \
-        / self.header['trial_hierarchy']['nADCNumChannels'][0]) \
-        - dp_in_epochs
-        #half of this space added before the epoch, and half after, so
-        #compute the left pad for convience
-        self._dp_lpad = self._dp_pad / 2
+        synch_array = np.fromfile(self.fid,
+                                  synch_array_dtype,
+                                  self.header['f_structure']['lSynchArraySize'])
+        sl = []
+        for strt, length in synch_array:
+            sl.append([strt, length])
+        sa = np.array(sl)
+        return sa
 
     def sample_rate(self):
         try:
@@ -179,86 +374,8 @@ class abf_reader(object):
           1 * 1000000\
           /self.header['trial_hierarchy']['fADCSampleInterval']\
           /self.header['trial_hierarchy']['nADCNumChannels']
-          return self._sample_rate[0]
-
-    def epochs_from_header(self):
-        # have to figure out how to deal with active vs. inactive
-        # epochs might be glued together in an object, a 'constructed waveform',
-
-        self.episodes_from_header()
-        
-        #eventually, create an two item list of lists: each sublist
-        #will be a list of epoch objects
-        #but for now:
-        self.epochs = []
-        
-        #for readibility
-        eewp = self.header['ext_epoch_waveform_pulses']
-
-        self._actv_wv = np.nonzero(eewp['nWaveformEnable'][0])[0]
-        if len(self._actv_wv)>1:
-            raise IndexError('this is currently not ready to handle to active waveforms')
-        else:
-            self._actv_wv = self._actv_wv[0]
-
-        #get the number of epochs, by using the type. There are 10
-        #possible epochs, those whos type is not zero are actually
-        #defined/inuse
-        self._num_epochs = np.nonzero(eewp['nEpochType'][0][self._actv_wv])[0].size
-
-        # more data are recorded than the num data points defined in
-        # the epochs.
-
-        # Here is a kludge to get the indexes of each
-        # epoch correct, note that I am using the extended epoch
-        # wavefrom pulses portion of the header
-        try:
-            self._dp_pad
-        except AttributeError:
-            self.get_dp_pad()
-
-        tmp_dp_counter = 0
-        tmp_dp_counter += self._dp_lpad
-
-        # Make an epoch object for each epoch.
-        # At the moment only support abfs with a single active waveform
-        for epoch in range(self._num_epochs):
-            tmp_epoch_level_init = eewp['fEpochInitLevel'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch_dur_init = eewp['lEpochInitDuration'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch_type = eewp['nEpochType'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch_level_incrm = eewp['fEpochLevelInc'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch_dur_incrm = eewp['lEpochDurationInc'][0]\
-                [self._actv_wv][epoch]
-            tmp_epoch = abf_epoch(tmp_epoch_level_init,
-                          tmp_epoch_dur_init, tmp_epoch_type,
-                                  tmp_dp_counter, self,
-                                  tmp_epoch_level_incrm,
-                                  tmp_epoch_dur_init)
-            tmp_dp_counter += tmp_epoch_dur_init
-            self.epochs.append(tmp_epoch)
-
-    def episodes_from_header(self):
-        '''This creates episodes, but i think episodes composed of epochs with increasing or decreasung durations will break this'''
-        self.episodes = []
-        t_h = self.header['trial_hierarchy']
-        self._episode_len = t_h['lNumSamplesPerEpisode'] /\
-            t_h['nADCNumChannels']
-        self._num_episodes = t_h['lEpisodesPerRun']
-        for episode in range(self._num_episodes):
-            tmp_episode = abf_episode(self._episode_len * episode, episode)
-            self.episodes.append( tmp_episode )
-        self.episodes = np.array(self.episodes)
-
-    def episode_data(self):
-        '''reshape continous data into composite episodes, right now incrementing episode/epoch lengths are not supported'''
-        self.episodes_from_header()
-        self.read_data()
-        self.mm = self.mm.reshape((self._num_episodes, self._episode_len, self.mm.shape[1]))
-        return self.mm
+          self._sample_rate = self._sample_rate[0]
+          return self._sample_rate
 
     def start_time(self):
         try:
@@ -288,67 +405,5 @@ class abf_reader(object):
                                       t_d['second'],t_d['microsecond'])
             return self._file_start_time
 
-class abf_episode:
-
-    def __init__(self, data_point_start, episode_num):
-        # this data point will be relative to the run (runs are not
-        # implemented yet, because, all my files / protocols only have a
-        # single run.
-        self._dp_start = data_point_start
-        self._episode_num = episode_num
-
-class abf_epoch:
-
-    def __init__(self, level_init,  dur_init, epoch_type, data_point_start,\
-                     abf_reader, level_incrm=0, dur_incrm=0):
-        # data point_start is relative to the start of the episode, it is not
-        # an index for data
-        ### incrementing durations are not supported now.
-        self._abf_reader = abf_reader
-        self._level_init = level_init
-        self._dur_init = dur_init
-        self._level_incrm = level_incrm
-        self._dur_incrm = dur_incrm
-        self._type = epoch_type
-        self._level = level_init
-        self._levels = self.levels()
-        self._dur = dur_init
-        self._dp_start = data_point_start
-        self._dp_end = self._dp_start + self._dur
-        if epoch_type==1:
-            self._type = 'step'
-        elif epoch_type==2:
-            self._type = 'ramp'
-
-    def __call__(self):
-        levels = self._levels
-        return (levels, self.data())
-
-    def levels(self):
-        ###NOTE THIS METHOD IS BROKEN, NEEDS TO LOOK FIRST AT THE
-        ###['ext_epoch_waveform_pulses']['nWaveformEnable'] and only
-        ###return the waveform pulses that are enabled. - ei the DAC
-        ###that are out putting stuff in the protocol
-        self._levels = []
-        for epi_num, episode in enumerate(self._abf_reader.episodes):
-            self._levels.append(self._level_init + (self._level_incrm * epi_num))
-        self._levels = np.array(self._levels)
-        return self._levels
-
-    def data(self):
-        self._abf_reader.episode_data()
-        # indexs are [episode,datapoints,chan_no]
-        return self._abf_reader.mm[:, self._dp_start : self._dp_start + self._dur_init, :]
-
-#    def mk_durs(self):
-        # self._dur = self._dur_init + (self._dur_incrm * iter_num)
-        # I have not tried any of the incrementing duration protocols, and I
-        # am not sure if the episode length will stay the same for all
-        # episode, despite the increasing duration of an epoch, for now, I
-        # will assume that the episode length in the header is fixed, and so
-        # the epochs class should have start and stop data point indexes as
-        # properties / fields that are relative to the episode.
-        ########## for now, just right this for non- incrementing durations -
-        ########## add later if needed
-
-                     
+    def stop_watch_time(self):
+        return int(self.header['fid_size_info']['lStopwatchTime'][0])
