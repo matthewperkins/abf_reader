@@ -8,7 +8,7 @@ import sys
 def main(abf_path):
 
     # make abf reader instance
-    abrf = abr(abf_pathx)
+    abrf = abr(abf_path)
 
     # set up the abf_chunker
     # give chunker an abr 

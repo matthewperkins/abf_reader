@@ -59,10 +59,22 @@ class abf_chunker_plotter(object):
         nrgbtm = 0
 
         #if there is a filetype keyword, pop and set
-        if 'filetype' in kwds.keys():
-            filetype = kwds.pop('filetype')
+        if 'image_type' in kwds.keys():
+            image_type = kwds.pop('image_type')
         else:
-            filetype = 'png'
+            image_type = 'png'
+
+        #if there is a image_name keyword, pop and set
+        if 'image_name' in kwds.keys():
+            image_name = kwds.pop('image_name')
+        else:
+            image_name = 'tmp'
+
+        # if there is a color keyword, pop and set
+        if 'color' in kwds.keys():
+            col = kwds.pop('color')
+        else:
+            col = 'black'
         
         import subprocess
         tmp_files = []
@@ -97,19 +109,19 @@ class abf_chunker_plotter(object):
                     ax.text(xbar_dp,yplc, "%s %s" % (xbar_sec, "sec"),
                             ha = 'right', va = 'top')
                 ax.set_axis_off()
-                ax.plot(data, linewidth = self.linethickness, color = 'black')
+                ax.plot(data, linewidth = self.linethickness, color = col)
                 ax.set_ylim(self._ylim['cells'][cell_num])
                 ax.set_xlim((0,len(d)))
             for neurgrm_num, neurgrm in enumerate(neurgrm_list):
                 data = d[:,neurgrm]
                 ax = plt.subplot(gs_neurgrm[neurgrm_num, 0])
                 ax.set_axis_off()
-                ax.plot(data, linewidth = self.linethickness, color = 'black')
+                ax.plot(data, linewidth = self.linethickness, color = col)
                 ax.set_ylim(self._ylim['neurgrms'][neurgrm_num])
                 ax.set_xlim((0,len(d)))
             print(fig.get_size_inches())
             del d
-            filname = "%s_%03d.%s" % ('tmp', i, filetype)
+            filname = "%s_%03d.%s" % ('tmp', i, image_type)
             print(filname)
             tmp_files.append(filname)
             fig.savefig(filname, dpi = dpi)
@@ -128,10 +140,7 @@ class abf_chunker_plotter(object):
         # add the files to stitch
         montage_cmmnd.extend(tmp_files)
         # add the output file name
-        if 'image_name' in kwds.keys():
-            image_name = kwds.pop('image_name')
-        else:
-            image_name = 'out.png'
+        image_name = "%s.%s" % (image_name, image_type)
         print(image_name)
         montage_cmmnd.extend([image_name])
 
