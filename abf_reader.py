@@ -310,6 +310,7 @@ class abf_reader(object):
         if 'num_rows' in kwds.keys():
             nrows = kwds.pop('num_rows')
         if 'stop_row' in kwds.keys():
+            stop_row = kwd.pop('stop_row')
             # check if start_row is beginning
             if offset!=self.hdr_offset:
                 nrows = stop_row - start_row
