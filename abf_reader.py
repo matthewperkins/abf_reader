@@ -347,7 +347,7 @@ class abf_reader(object):
         self.addGain()
         self._chan_holder = -1
         self._num_episodes = \
-            self._abr.header['fid_size_info']['lActualEpisodes'][0]
+            self.header['fid_size_info']['lActualEpisodes'][0]
 
         # rewrite the ADC units into a convience variable, trunc to 2 chars
         self._ADC_Units = \
