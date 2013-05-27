@@ -1,12 +1,13 @@
 from abf_reader import *
 import matplotlib.pyplot as plt
+import warnings
 
 class epoch(object):
     def __init__(self, abf, DAC_num, epoch_num, **kwds):
         self.abf = abf
         self.DAC_num = DAC_num
         self.epoch_num = epoch_num
-        self.levels = make_epch_levels(abf.header, DAC_num)
+        self._levels = make_epch_levels(abf.header, DAC_num)[:,epoch_num]
         self.epch_indxs = make_epch_indxs(abf.header,
                                      DAC_num,
                                      nrmd = 'sweep')[:,epoch_num]
@@ -31,16 +32,30 @@ class epoch(object):
         # left indexs, pad than zero out negatives
         self.padded_epch_indxs[:,0] -= left
         self.padded_epch_indxs[:,0][np.where(self.padded_epch_indxs[:,0]<0)[0]]=0
+        self.padded_epch_indxs[:,0][np.where(self.padded_epch_indxs[:,0]>sweep_len)]=sweep_len
         # right indxes, pad than set overlong to sweep len
         self.padded_epch_indxs[:,1] += right
         self.padded_epch_indxs[:,1][np.where(self.padded_epch_indxs[:,1]>sweep_len)]=sweep_len
+        self.padded_epch_indxs[:,1][np.where(self.padded_epch_indxs[:,1]<0)[0]]=0
+        # now loop through just to check
+        for i, (strt, stop) in enumerate(self.padded_epch_indxs):
+            assert strt!=stop, "Epoch Padding is BAD: Start Idx (%d) == Stop Idx (%d) at Sweep %d" % (strt, stop, i)
 
-    def data(self, swp_idx):
+    def _data(self, swp_idx):
         strt = self._swp_indxs[swp_idx,0] +\
                     self.padded_epch_indxs[swp_idx,0]
         stop = self._swp_indxs[swp_idx,0] +\
                     self.padded_epch_indxs[swp_idx,1]
-        return (self.abf.read_data(start_row = strt, stop_row = stop))
+        if stop<strt:
+            # if stop is before start, read and reverse
+            warn_msg = "\n\nStart Epoch Idx (%d) is after Stop Epoch Idx (%d), for sweep (%d), data are time inverted\n\n" % (strt, stop, swp_idx)
+            warnings.warn(warn_msg)
+            return (self.abf.read_data(start_row = stop, stop_row = strt)[::-1])
+        elif strt<stop:
+            return (self.abf.read_data(start_row = strt, stop_row = stop))
+
+    def _lvl(self, swp_idx):
+        return self._levels[swp_idx]
         
     def __iter__(self):
         return self.gen_iter()
@@ -48,7 +63,7 @@ class epoch(object):
     def gen_iter(self):
         # using generator
         for swp_idx in range(self._num_swps):
-            yield self.data(swp_idx)
+            yield self._data(swp_idx)
 
 class waterfall(object):
     def __init__(self, abf_epoch,
@@ -85,8 +100,9 @@ class waterfall(object):
                                           self._stop,
                                           self._step)):
             xs = self.xs + self.offset*i
-            ys = self.abf_epoch.data(swp_idx)[:,self.channo]
-            yield xs, ys
+            ys = self.abf_epoch._data(swp_idx)[:,self.channo]
+            lvl = self.abf_epoch._lvl(swp_idx)
+            yield xs, ys, lvl
         self.xlim = (0, max(xs))
 
 if __name__=='__main__':
