@@ -67,7 +67,8 @@ class epoch(object):
 
 class waterfall(object):
     def __init__(self, abf_epoch,
-                 channo = 0, xprcnt = 110, yoffset = 0, **kwds):
+                 channo = 0, xprcnt = 110, xoffset_sec = False,
+                 yoffset = 0, **kwds):
         self.abf_epoch = abf_epoch
         self.channo = channo
         self.xprcnt = xprcnt
@@ -76,8 +77,15 @@ class waterfall(object):
         self.swp_len_dp = len(abf_epoch.__iter__().next()[:,self.channo])
         self.sr = sample_rate(abf_epoch.abf.header)
         self.swp_len_sec = self.swp_len_dp/self.sr
-        self.offset = (self.swp_len_sec) * xprcnt/100.
-        self.interstitial = self.offset - self.swp_len_sec
+        if xprcnt is not False:
+            self.offset = (self.swp_len_sec) * xprcnt/100.
+            self.interstitial = self.offset - self.swp_len_sec
+            self._fixd_offset = False
+        if xoffset_sec is not False:
+            # sec an x offset in seconds
+            self.offset = xoffset_sec
+            self.interstitial = 0
+            self._fixd_offset = True
         self.xs = np.linspace(0, self.swp_len_sec, self.swp_len_dp)
         super(waterfall, self).__init__(**kwds)
 
@@ -91,16 +99,20 @@ class waterfall(object):
         self._step = step
         self._num_iter_sweeps =\
             len(range(self._start, self._stop, self._step))
-        self._xlim =\
-            (0, self._num_iter_sweeps * self.swp_len_sec +\
-                 (self.interstitial * self._num_iter_sweeps))
+        if self._fixd_offset:
+            self._xlim = (\
+                0, self._num_iter_sweeps * self.offset + self.swp_len_sec - self.offset)
+        else:
+            self._xlim =\
+                (0, self._num_iter_sweeps * self.swp_len_sec +\
+                     (self.interstitial * self._num_iter_sweeps))
 
     def gen_iter(self):
         for i, swp_idx in enumerate(range(self._start,
                                           self._stop,
                                           self._step)):
             xs = self.xs + self.offset*i
-            ys = self.abf_epoch._data(swp_idx)[:,self.channo]
+            ys = self.abf_epoch._data(swp_idx)[:,self.channo] + self.yoffset*i
             lvl = self.abf_epoch._lvl(swp_idx)
             yield xs, ys, lvl
         self.xlim = (0, max(xs))
