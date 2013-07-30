@@ -59,7 +59,8 @@ class abf_chunker(object):
         fractions of the x range
 
         If left is a tuple of floats and seconds is True, these are assumed to
-        be seconds of x range'''
+        be seconds of x range
+        '''
         # style points to matplotlib, yay free software
 
         if width is None and iterable(left):
@@ -77,6 +78,7 @@ class abf_chunker(object):
                 elif seconds==True:
                     # check to make sure the bounds in seconds are pos.
                     # neg values will read the whol file
+                    # assert self.abr.get_synch_array().size==0, "File has been paused, not implemented" 
                     for sec in left: assert sec>=0, "seconds bounds must be greater than zero"
                     self.left = self.second_to_row(left[0])
                     self.right = self.second_to_row(left[1])

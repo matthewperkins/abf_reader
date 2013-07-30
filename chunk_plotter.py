@@ -135,7 +135,7 @@ class abf_chunker_plotter(object):
 
         # the montage command should be same more or less always
         # montage -tile x1 -background transparent -mode Concatenate `ls *.png` out.png
-        montage_cmmnd = ['montage','-tile','x1','-background','transparent','-mode','Concatenate']
+        montage_cmmnd = ['gm', 'montage','-tile','x1','-background','transparent','-mode','Concatenate']
             
         # add the files to stitch
         montage_cmmnd.extend(tmp_files)

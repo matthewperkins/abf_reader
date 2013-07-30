@@ -86,6 +86,7 @@ def main(abf_path, **kwargs):
              'cell_lms':[(-80,30)]*abrf.num_chans(),
              'neurgrm_lms':[(-3,3)*0],
              'fig_sz':(10,8),
+             'scale_bar':False,
              'filetype':'png'}
 
     for key in kwargs.keys():
