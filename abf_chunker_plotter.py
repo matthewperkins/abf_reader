@@ -86,8 +86,8 @@ def main(abf_path, **kwargs):
              'cell_lms':[(-80,30)]*abrf.num_chans(),
              'neurgrm_lms':[(-3,3)*0],
              'fig_sz':(10,8),
-             'scale_bar':False,
-             'filetype':'png'}
+             'filetype':'png',
+             'nominal_chunksize':2**28}
 
     for key in kwargs.keys():
         if key=='cells':
@@ -97,8 +97,9 @@ def main(abf_path, **kwargs):
             if 'neurgrm_lms' not in kwargs.keys():
                 options['neurgrm_lms'] = [(-3,3)]*len(kwargs['cells'])
         options[key] = kwargs[key]
+        
     # give chunker an abr 
-    abf_chunker = chunker.abf_chunker(abrf)
+    abf_chunker = chunker.abf_chunker(abrf, nominal_chunksize = options['nominal_chunksize'])
 
     # set up chunker plotter
     chnk_plter = abf_chunker_plotter(abf_chunker)

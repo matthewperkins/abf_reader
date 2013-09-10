@@ -4,7 +4,7 @@ from matplotlib.cbook import iterable
 import pdb
 class abf_chunker(object):
     ''' use this to return data in chunks from abf files'''
-    def __init__(self, abr):
+    def __init__(self, abr, **kwds):
         self.abr = abr
         self.dp = self.abr.total_aq()
         self._chunk_counter = 0
@@ -12,6 +12,8 @@ class abf_chunker(object):
         self.numchans = self.abr.num_chans()
         self.ncols = self.numchans
         self.nrows = self.dp/self.numchans
+        if 'nominal_chunksize' in kwds:
+            self._nominal_chunksize = kwds.pop('nominal_chunksize')
 
         ###############
         # think like this:
@@ -30,6 +32,7 @@ class abf_chunker(object):
         self.right = self.nrows
         self.set_range((self.left, self.right))
         self.make_chunk_size()
+        super(abf_chunker, self).__init__(**kwds)
 
     def rewind(self):
         self._chunk_counter = 0
@@ -105,13 +108,16 @@ class abf_chunker(object):
         self.range_rows = (self.right - self.left)
         self.make_chunk_size()
 
-    def make_chunk_size(self, nominal_chunksize = 2**27):
+    def make_chunk_size(self):
+
+        #be default this will make nominal chunks of size
+        # 2**27, this can be changed by setting the _nominal_chunksize property
 
         #local copy of base size, for no reason
         base_size = self.base_size
 
         #find number of rows in a 2**21 chunk
-        self.chunk_row_size = int(nominal_chunksize) / int(base_size)
+        self.chunk_row_size = int(self._nominal_chunksize) / int(base_size)
         self.num_chunk_rows = self.range_rows / self.chunk_row_size
         self.rmndr_row_size = self.range_rows % self.chunk_row_size
         self.chunksize =  self.chunk_row_size * base_size

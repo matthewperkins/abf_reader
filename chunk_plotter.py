@@ -3,6 +3,8 @@ from matt_axes_cust import no_spines
 import pdb
 import numpy as np
 import matplotlib.pyplot as plt
+from signal_tools import bwfiltfilt
+from mp_scale_bars import AnchoredScaleBar, DraggableScaleBar
 import os
 
 class abf_chunker_plotter(object):
@@ -40,6 +42,30 @@ class abf_chunker_plotter(object):
         
     def plot(self, dpi, cell_list, neurgrm_list, **kwds):
 
+        # sample scale pars in keyword
+        # kwds['scale_bars'] = {'shared':{'bbox_to_anchor' : (0.3,0.4),
+        #                                 'xsep' : 1,
+        #                                 'ysep' : 1,
+        #                                 'pad' : 1,
+        #                                 'prop' : FP(size=6),
+        #                                 'borderpad':0},
+        #                       'cell':[{'sizex' : 0.5,
+        #                                'labelx' : '0.5 sec',
+        #                                'sizey' : 20,
+        #                                'labely' : '20 nA'}]*num_cells,
+        #                       'neurgrm':[{'sizex' : 0.5,
+        #                                   'labelx' : '0.5 sec',
+        #                                   'sizey' : 20,
+        #                                   'labely' : '20 nA'}]*num_neurgrms}
+        
+
+        # nested function for scalebars
+        def saveclose(event):
+            if event.key=='o' or 'O':
+                plt.gcf().set_size_inches(( self.indiv_fig_width * width_frct, self.indiv_fig_height))
+                plt.gcf().savefig(filname, dpi = dpi, transparent = True)
+                plt.close()
+
         # most of the plot will be for intracell
 
         # the ratio that cell signals will be bigger than neurogram signals
@@ -58,7 +84,7 @@ class abf_chunker_plotter(object):
         nrgtop = cellbtm - 0.025 # give a small (vertical 2.5% pad)
         nrgbtm = 0
 
-        #if there is a filetype keyword, pop and set
+        #if there is a image_type keyword, pop and set
         if 'image_type' in kwds.keys():
             image_type = kwds.pop('image_type')
         else:
@@ -80,38 +106,70 @@ class abf_chunker_plotter(object):
         tmp_files = []
         for i, d in enumerate(self._abf_chunker):
             fig = plt.figure()
-            fig.patch.set_alpha(0)
             width_frct = float(len(d))/self._abf_chunker.chunk_row_size
-            fig.set_size_inches(( self.indiv_fig_width * width_frct, self.indiv_fig_height))
             gs_cells = gridspec.GridSpec(len(cell_list), 1)
             gs_cells.update(left = 0, right = 1,
                             top = celltop, bottom = cellbtm, hspace = 0.05)
             gs_neurgrm = gridspec.GridSpec(len(neurgrm_list), 1)
             gs_neurgrm.update(left = 0, right = 1,
                               top = nrgtop, bottom = nrgbtm, hspace = 0.05)
+            if 'scale_bars' in kwds.keys():
+                dsbs = []
+                # need to adjust the x to data points here
+                try: 
+                    for SclBarDict in kwds['scale_bars']['cell']:
+                        try:
+                            assert SclBarDict['correctdx'] is True
+                        except (KeyError, AssertionError):
+                            SclBarDict['sizex'] *= self._abf_chunker.abr.sample_rate()
+                            SclBarDict['correctdx'] = True
+                    # kludge need to pop this temp keyword off again                            
+                    for SclBarDict in kwds['scale_bars']['cell']:
+                        try:
+                            SclBarDict.pop('correctdx')
+                        except KeyError:
+                            pass
+                except KeyError:
+                    pass
+                try:
+                    for SclBarDict in kwds['scale_bars']['neurgrm']:
+                        try:
+                            assert SclBarDict['correctdx'] is True
+                        except (KeyError, AssertionError):
+                            SclBarDict['sizex'] *= self._abf_chunker.abr.sample_rate()
+                            SclBarDict['correctdx'] = True
+                    # kludge need to pop this temp keyword off again                            
+                    for SclBarDict in kwds['scale_bars']['neurgrm']:
+                        try:
+                            SclBarDict.pop('correctdx')
+                        except KeyError:
+                            pass
+                except KeyError:
+                    pass
+            
             for cell_num, cell in enumerate(cell_list):
                 data = d[:,cell]
                 ax = plt.subplot(gs_cells[cell_num, 0])
-                if 'yscale' in kwds.keys():
-                    ybar = kwds.pop('yscale')
-                    ytop = self._ylim['cells'][cell_num][1]
-                    ybttm = self._ylim['cells'][cell_num][1]
-                    ax.plot([0,0],[ytop-ybar,ytop], color = 'red', linewidth = 1)
-                    ax.text(0,ytop, "%s %s" % (ybar, "mV"), ha = 'left', va = 'top')
-                if 'xscale' in kwds.keys():
-                    xbar_sec = kwds.pop('xscale')
-                    xbar_dp = xbar_sec * self._abf_chunker.abr.sample_rate()
-                    ytop = self._ylim['cells'][cell_num][1]
-                    ybttm = self._ylim['cells'][cell_num][0]
-                    yrange = ytop - ybttm
-                    yplc = ybttm + (yrange * 0.8)
-                    ax.plot([0,xbar_dp],[yplc,yplc], color = 'red', linewidth = 1)
-                    ax.text(xbar_dp,yplc, "%s %s" % (xbar_sec, "sec"),
-                            ha = 'right', va = 'top')
+                if 'lp_filt' in kwds.keys():
+                    if kwds['lp_filt'][cell_num] is False:
+                        pass
+                    else:
+                        data = bwfiltfilt(data,
+                                          self._abf_chunker.abr.sample_rate(),
+                                          kwds['lp_filt'][cell_num])
                 ax.set_axis_off()
                 ax.plot(data, linewidth = self.linethickness, color = col)
                 ax.set_ylim(self._ylim['cells'][cell_num])
                 ax.set_xlim((0,len(d)))
+                if 'scale_bars' in kwds.keys():
+                    sb = AnchoredScaleBar(plt.gca().transData, plt.gcf().dpi_scale_trans,
+                                          bbox_transform = plt.gca().transAxes,
+                                          **dict(kwds['scale_bars']['shared'].items()+
+                                               kwds['scale_bars']['cell'][cell_num].items()))
+                    ax.add_artist(sb)
+                    dsb = DraggableScaleBar(sb)
+                    dsb.connect()
+                    dsbs.append(dsb)
             for neurgrm_num, neurgrm in enumerate(neurgrm_list):
                 data = d[:,neurgrm]
                 ax = plt.subplot(gs_neurgrm[neurgrm_num, 0])
@@ -119,17 +177,39 @@ class abf_chunker_plotter(object):
                 ax.plot(data, linewidth = self.linethickness, color = col)
                 ax.set_ylim(self._ylim['neurgrms'][neurgrm_num])
                 ax.set_xlim((0,len(d)))
+                if 'scale_bars' in kwds.keys():
+                    sb = AnchoredScaleBar(plt.gca().transData, plt.gcf().dpi_scale_trans,
+                                          bbox_transform = plt.gca().transAxes,
+                                          **dict(kwds['scale_bars']['shared'].items()+
+                                               kwds['scale_bars']['neurgrm'][neurgrm_num].items()))
+                    ax.add_artist(sb)
+                    dsb = DraggableScaleBar(sb)
+                    dsb.connect()
+                    dsbs.append(dsb)
             print(fig.get_size_inches())
             del d
             filname = "%s_%03d.%s" % ('tmp', i, image_type)
             print(filname)
-            tmp_files.append(filname)
-            fig.savefig(filname, dpi = dpi)
+            if 'scale_bars' in kwds.keys():
+                scale_bar = kwds.pop('scale_bars')
+                plt.gcf().canvas.mpl_connect('key_press_event', saveclose)
+                plt.show()
+            else:
+                fig.set_size_inches(( self.indiv_fig_width * width_frct, self.indiv_fig_height))
+                fig.savefig(filname, dpi = dpi, transparent = True)
             ### the order that these are cleared is very important, otherwise have memleaks.
+            tmp_files.append(filname)
             plt.clf()
             del ax
             plt.close(fig)
             del fig
+
+        if self._abf_chunker.num_chunk_rows<1:
+            image_name = "%s.%s" % (image_name, image_type)
+            if os.path.exists(image_name):
+                os.remove(image_name)
+            os.rename(filname, image_name)
+            return 0
 
         # this is so cool, calling ImageMagic as a subprocess!!
 
