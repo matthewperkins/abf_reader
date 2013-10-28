@@ -206,6 +206,10 @@ class abf_reader(object):
         self._ADC_Units = \
             np.array(self.header['multi-chan_inf']['sADCUnits'][0],
                      dtype = '|S2')
+        # rewrite the DAC units into a convience variable, trunc to 2 chars
+        self._DAC_Units = \
+            np.array(self.header['multi-chan_inf']['sDACChannelUnits'][0],
+                     dtype = '|S2')
         # make an atomic size, so that data can be broken up with out
         # segmenting cols(channels)
         if self.header['f_structure']['nDataFormat'][0]==1: #float data
