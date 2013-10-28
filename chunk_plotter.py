@@ -69,7 +69,10 @@ class abf_chunker_plotter(object):
         # most of the plot will be for intracell
 
         # the ratio that cell signals will be bigger than neurogram signals
-        cell_bias = 2/1.
+        if 'cell_bias' in kwds.keys():
+            cell_bias = kwds['cell_bias']
+        else:
+            cell_bias = 4/1.
 
         # calc the fraction of the fig that will be for cells vs neurgrms,
         # using above fraction
@@ -101,6 +104,11 @@ class abf_chunker_plotter(object):
             col = kwds.pop('color')
         else:
             col = 'black'
+
+        # if there is a color keyword, pop and set
+        if 'plt_kwargs' not in kwds.keys():
+            kwds['plt_kwargs'] = {'color':col,
+                                  'linewidth':self.linethickness}
         
         import subprocess
         tmp_files = []
@@ -158,7 +166,8 @@ class abf_chunker_plotter(object):
                                           self._abf_chunker.abr.sample_rate(),
                                           kwds['lp_filt'][cell_num])
                 ax.set_axis_off()
-                ax.plot(data, linewidth = self.linethickness, color = col)
+                if 'scale_bars' not in kwds.keys():
+                    ax.plot(data, **kwds['plt_kwargs'])
                 ax.set_ylim(self._ylim['cells'][cell_num])
                 ax.set_xlim((0,len(d)))
                 if 'scale_bars' in kwds.keys():
@@ -174,7 +183,8 @@ class abf_chunker_plotter(object):
                 data = d[:,neurgrm]
                 ax = plt.subplot(gs_neurgrm[neurgrm_num, 0])
                 ax.set_axis_off()
-                ax.plot(data, linewidth = self.linethickness, color = col)
+                if 'scale_bars' not in kwds.keys():
+                    ax.plot(data, **kwds['plt_kwargs'])
                 ax.set_ylim(self._ylim['neurgrms'][neurgrm_num])
                 ax.set_xlim((0,len(d)))
                 if 'scale_bars' in kwds.keys():
