@@ -5,6 +5,8 @@ import warnings
 class epoch(object):
     def __init__(self, abf, DAC_num, epoch_num, **kwds):
         self.abf = abf
+        # convience variable for sample rate
+        self.sr = sample_rate(self.abf.header)
         self.DAC_num = DAC_num
         self.epoch_num = epoch_num
         self._levels = make_epch_levels(abf.header, DAC_num)[:,epoch_num]
