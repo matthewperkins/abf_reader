@@ -182,11 +182,62 @@ def make_epch_indxs(abf_header, DAC_num, nrmd = False):
     epch_indxs = np.array(epch_indx_list)
     return epch_indxs
 
+class DAC(object):
+    def __init__(self, abf_header, DAC_num, cap_pad_ms = 1.5, **kwds):
+        from abf_header_dtype import abf_header_dtype
+        assert 0 <= DAC_num < 2, "DAC_num must be 0 or 1"
+        assert abf_header.dtype is abf_header_dtype, "header has wrong dtype"
+        self._num_episodes = get_num_episodes(abf_header)
+        self._actv = abf_header['ext_epoch_waveform_pulses']['nWaveformEnable'][0][DAC_num]
+        self._epsd_ixs = make_epsd_indxs(abf_header)
+        self._epch_ixs = make_epch_indxs(abf_header, DAC_num)
+        self._epch_lvls = make_epch_levels(abf_header, DAC_num)
+        self._DAC_num = DAC_num
+        self._cap_pad_ms = cap_pad_ms
+        self._cap_pad_dp = int(cap_pad_ms/1000.*sample_rate(abf_header))
+        super(DAC, self).__init__(**kwds)
+
+        self._actv_epchs = find_actv_epchs(abf_header, DAC_num)
+        self._num_epchs = len(self._actv_epchs)
+        self._cap_pad = False
+        self._make_epoch_slices()
+
+    def _make_epoch_slices(self):
+        # make epoch slices
+        self._epch_slices = []
+        for epsd_i in range(self._num_episodes):
+            _tmp = []
+            for epch_i in range(self._num_epchs):
+                _tmp.append(slice(self._epch_ixs[epsd_i, epch_i, 0],
+                                  self._epch_ixs[epsd_i, epch_i, 1]))
+            self._epch_slices.append(_tmp)
+
+    def pad_cap(self, pad=True):
+        if pad is True and self._cap_pad is not True:
+            self._epch_ixs[:,:,0]+=self._cap_pad_dp
+            self._make_epoch_slices()
+            self._cap_pad = True
+        elif pad is False and self._cap_pad is True:
+            self._epch_ixs[:,:,0]-=self._cap_pad_dp
+            self._make_epoch_slices()
+            self._cap_pad = False
+
+    def __iter__(self, epoch = 1):
+        for epsd_num in range(self._num_episodes):
+            yield self._epch_slices[epsd_num][epoch]
+
 class abf_reader(object):
+    from mhp_re import yyyy_mm_dd_nnnn
+    fnum_re = yyyy_mm_dd_nnnn
     def __init__(self, fname):
         from abf_header_dtype import abf_header_dtype
         self._headr_struct = abf_header_dtype
         self.fname = os.path.basename(fname)
+        if abf_reader.fnum_re.search(self.fname):
+            m = abf_reader.fnum_re.search(self.fname)
+            self.fnum = m.groups()[-1]
+        else:
+            self.fnum = 'NA'
         if os.path.isabs(fname):
             self.path = os.path.dirname(fname)
         else:
@@ -210,6 +261,7 @@ class abf_reader(object):
         self._DAC_Units = \
             np.array(self.header['multi-chan_inf']['sDACChannelUnits'][0],
                      dtype = '|S2')
+
         # make an atomic size, so that data can be broken up with out
         # segmenting cols(channels)
         if self.header['f_structure']['nDataFormat'][0]==1: #float data
@@ -217,9 +269,14 @@ class abf_reader(object):
         elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
             self.base_size = 2 * self.num_chans() # 2byte size per int
 
+        # check file type
+        if self.header['fid_size_info']['nFileType'][0]==1:
+            self.DAC_0 = DAC(self.header, 0)
+            self.DAC_1 = DAC(self.header, 1)
+
     def verify_version(self):
         FVerNum = self.header['fid_size_info']['fFileVersionNumber']
-        ErrMsg = "current abf is version %f, this 'prog' only reads abf 1.8" % (FVerNum)
+        ErrMsg = "%s is version %f, this 'prog' only reads abf 1.8" % (self.fname, FVerNum)
         assert (FVerNum>=1.8) & (FVerNum<2.0), ErrMsg
 
     def hdr_offset(self):
