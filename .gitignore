@@ -38,6 +38,7 @@ Thumbs.db
 
 # disutils crap #
 build/*
+test/*
 *.pyc
 
 # emacs crap #
