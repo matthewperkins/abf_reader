@@ -27,7 +27,18 @@ def are_epochs_ramps(abr_header, DAC_num):
 def find_actv_epchs(abr_header, DAC_num):
     epch_types = abr_header['ext_epoch_waveform_pulses']\
         ['nEpochType'][0, DAC_num]
-    return np.nonzero(epch_types)[0]
+    actv_epchs = np.nonzero(epch_types)[0]
+
+    # set inactive epchs that are zero length
+    eewp = abr_header['ext_epoch_waveform_pulses']
+    num_epsds = get_num_episodes(abr_header)
+    dur_inits = eewp['lEpochInitDuration'][0]\
+        [DAC_num][actv_epchs]
+    dur_incrms = eewp['lEpochDurationInc'][0]\
+        [DAC_num][actv_epchs]
+    NonZDurEpchs = np.where(np.abs(dur_incrms) + np.abs(dur_inits)!=0)
+    NonZActvEpchs = actv_epchs[NonZDurEpchs]
+    return NonZActvEpchs
 
 def get_num_episodes(abf_header):
     return abf_header['fid_size_info']['lActualEpisodes'][0]
@@ -469,3 +480,14 @@ class abf_reader(object):
 
     def stop_watch_time(self):
         return int(self.header['fid_size_info']['lStopwatchTime'][0])
+
+if __name__=='__main__':
+    import os
+    pth = os.path.join(os.environ.get("LABDIR"),
+                       'B44_B48_experiments','cng_current',
+                       'cbi2_current_time_course','expts',
+                       '2013_12_10','clmpx_bin')
+    abr = abf_reader(os.path.join(pth,'2013_12_10_0023.abf'))
+    d = abr.DAC_0
+
+
