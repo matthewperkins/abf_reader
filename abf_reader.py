@@ -285,6 +285,9 @@ class abf_reader(object):
             self.DAC_0 = DAC(self.header, 0)
             self.DAC_1 = DAC(self.header, 1)
 
+        # for covience, make a protocol variable
+        self.protocol = self.header['ext_environment_inf']['sProtocolPath'][0].strip()
+
     def verify_version(self):
         FVerNum = self.header['fid_size_info']['fFileVersionNumber']
         ErrMsg = "%s is version %f, this 'prog' only reads abf 1.8" % (self.fname, FVerNum)
