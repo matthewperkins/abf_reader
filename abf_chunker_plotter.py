@@ -69,9 +69,14 @@ def sfigsz(chnk_plter, **kwargs):
     chnk_plter.set_fig_size_inches(fig_sz)
 
 def main(abf_path, **kwargs):
+
+    if 'abf_opts' in kwargs.keys():
+        abf_opts = kwargs['abf_opts']
+    else:
+        abf_opts = {}
                   
     # make abf reader instance
-    abrf = abr(abf_path)
+    abrf = abr(abf_path, **abf_opts)
     # print channel names, for sanity
     abrf.chan_names()
     print('\n')

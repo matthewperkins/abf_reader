@@ -7,6 +7,13 @@ from signal_tools import bwfiltfilt
 from mp_scale_bars import AnchoredScaleBar, DraggableScaleBar
 import os
 
+def trace_axes(ax):
+    from matplotlib.pyplot import setp
+    for loc, spine in ax.spines.iteritems():
+        spine.set_color('none') # don't draw spine
+    setp(ax.get_xticklabels(), visible = False)
+    setp(ax.get_yticklabels(), visible = False)
+
 class abf_chunker_plotter(object):
     def __init__(self, _abf_chunker):
         self.num_chunks = _abf_chunker.num_chunk_rows
@@ -158,6 +165,11 @@ class abf_chunker_plotter(object):
             for cell_num, cell in enumerate(cell_list):
                 data = d[:,cell]
                 ax = plt.subplot(gs_cells[cell_num, 0])
+                if 'axisbg' in kwds.keys():
+                    ax.set_axis_bgcolor(kwds['axisbg'])
+                    trace_axes(ax)
+                else:
+                    ax.set_axis_off()
                 if 'lp_filt' in kwds.keys():
                     if kwds['lp_filt'][cell_num] is False:
                         pass
@@ -165,9 +177,11 @@ class abf_chunker_plotter(object):
                         data = bwfiltfilt(data,
                                           self._abf_chunker.abr.sample_rate(),
                                           kwds['lp_filt'][cell_num])
-                ax.set_axis_off()
                 if 'scale_bars' not in kwds.keys():
-                    ax.plot(data, **kwds['plt_kwargs'])
+                    if type(kwds['plt_kwargs']) is list:
+                        ax.plot(data, **kwds['plt_kwargs'][cell_num])
+                    else:
+                        ax.plot(data, **kwds['plt_kwargs'])
                 ax.set_ylim(self._ylim['cells'][cell_num])
                 ax.set_xlim((0,len(d)))
                 if 'scale_bars' in kwds.keys():
@@ -182,7 +196,11 @@ class abf_chunker_plotter(object):
             for neurgrm_num, neurgrm in enumerate(neurgrm_list):
                 data = d[:,neurgrm]
                 ax = plt.subplot(gs_neurgrm[neurgrm_num, 0])
-                ax.set_axis_off()
+                if 'axisbg' in kwds.keys():
+                    ax.set_axis_bgcolor(kwds['axisbg'])
+                    trace_axes(ax)
+                else:
+                    ax.set_axis_off()
                 if 'scale_bars' not in kwds.keys():
                     ax.plot(data, **kwds['plt_kwargs'])
                 ax.set_ylim(self._ylim['neurgrms'][neurgrm_num])
@@ -206,7 +224,13 @@ class abf_chunker_plotter(object):
                 plt.show()
             else:
                 fig.set_size_inches(( self.indiv_fig_width * width_frct, self.indiv_fig_height))
-                fig.savefig(filname, dpi = dpi, transparent = True)
+                if 'axisbg' in kwds.keys():
+                    fig.patch.set_color(kwds['axisbg'])
+                    fig.savefig(filname, dpi = dpi,
+                                facecolor = kwds['axisbg'],
+                                edgecolor = kwds['axisbg'])
+                else:
+                    fig.savefig(filname, dpi = dpi, transparent = True)
             ### the order that these are cleared is very important, otherwise have memleaks.
             tmp_files.append(filname)
             plt.clf()

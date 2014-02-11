@@ -240,7 +240,7 @@ class DAC(object):
 class abf_reader(object):
     from mhp_re import yyyy_mm_dd_nnnn
     fnum_re = yyyy_mm_dd_nnnn
-    def __init__(self, fname):
+    def __init__(self, fname, **kwds):
         from abf_header_dtype import abf_header_dtype
         self._headr_struct = abf_header_dtype
         self.fname = os.path.basename(fname)
@@ -287,6 +287,13 @@ class abf_reader(object):
 
         # for covience, make a protocol variable
         self.protocol = self.header['ext_environment_inf']['sProtocolPath'][0].strip()
+
+        # to deal with bad
+        self.bad_tele = False
+        if 'bad_tele' in kwds.keys():
+            assert type(kwds['bad_tele']) is bool, 'must be bool'
+            self.bad_tele = kwds.pop('bad_tele')
+            
 
     def verify_version(self):
         FVerNum = self.header['fid_size_info']['fFileVersionNumber']
@@ -410,10 +417,15 @@ class abf_reader(object):
 
     def scale_int_data(self, data):
         for indx, chan in enumerate(self._read_seq()):
-            divis = (self.header['multi-chan_inf']['fInstrumentScaleFactor'][0][chan] * \
-                     self.header['multi-chan_inf']['fSignalGain'][0][chan] * \
-                     self.header['multi-chan_inf']['fADCProgrammableGain'][0][chan] * \
-                     self.addGain[chan])
+            if self.bad_tele:
+                divis = (self.header['multi-chan_inf']['fInstrumentScaleFactor'][0][chan] * \
+                         self.header['multi-chan_inf']['fSignalGain'][0][chan] * \
+                         self.header['multi-chan_inf']['fADCProgrammableGain'][0][chan])
+            else:
+                divis = (self.header['multi-chan_inf']['fInstrumentScaleFactor'][0][chan] * \
+                         self.header['multi-chan_inf']['fSignalGain'][0][chan] * \
+                         self.header['multi-chan_inf']['fADCProgrammableGain'][0][chan] * \
+                         self.addGain[chan])
             mult =  self.header['hardware_inf']['fADCRange'][0] \
                    / self.header['hardware_inf']['lADCResolution'][0]
             offs = self.header['multi-chan_inf']['fInstrumentOffset'][0][chan] - \
