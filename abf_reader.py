@@ -465,33 +465,62 @@ class abf_reader(object):
           self._sample_rate = self._sample_rate[0]
           return self._sample_rate
 
-    def start_time(self):
-        try:
-            return self._file_start_time
-        except AttributeError:
+    def start_time(self, new_time = None):
+        if new_time is None:
+            try:
+                return self._file_start_time
+            except AttributeError:
+                from datetime import datetime
+                self._File_Time = {}
+                yyyymmdd = str(self.header['fid_size_info']['lFileStartDate'][0])
+                self._File_Time['year'] = int(yyyymmdd[0:4])
+                self._File_Time['month'] = int(yyyymmdd[4:6])
+                self._File_Time['day'] = int(yyyymmdd[-2:])
+
+                # 'lFileStartTime is in seconds. do some division for time
+                seconds_time = self.header['fid_size_info']['lFileStartTime'][0]
+                self._File_Time['hour'] = seconds_time/(60*60)
+                self._File_Time['minute'] = (seconds_time%(60*60))/60
+                self._File_Time['second'] = (seconds_time%(60*60))%60
+                self._File_Time['microsecond'] = \
+                  self.header['environment_inf']['nFileStartMillisecs'][0]\
+                  * 1000
+
+                #for reading self._File_Time = t_d
+                t_d = self._File_Time
+                self._file_start_time = datetime(t_d['year'],\
+                                          t_d['month'] , t_d['day'],\
+                                          t_d['hour'],t_d['minute'],\
+                                          t_d['second'],t_d['microsecond'])
+                return self._file_start_time
+        else:
             from datetime import datetime
-            self._File_Time = {}
-            yyyymmdd = str(self.header['fid_size_info']['lFileStartDate'][0])
-            self._File_Time['year'] = int(yyyymmdd[0:4])
-            self._File_Time['month'] = int(yyyymmdd[4:6])
-            self._File_Time['day'] = int(yyyymmdd[-2:])
-
-            # 'lFileStartTime is in seconds. do some division for time
-            seconds_time = self.header['fid_size_info']['lFileStartTime'][0]
-            self._File_Time['hour'] = seconds_time/(60*60)
-            self._File_Time['minute'] = (seconds_time%(60*60))/60
-            self._File_Time['second'] = (seconds_time%(60*60))%60
-            self._File_Time['microsecond'] = \
-              self.header['environment_inf']['nFileStartMillisecs'][0]\
-              * 1000
-
-            #for reading self._File_Time = t_d
-            t_d = self._File_Time
-            self._file_start_time = datetime(t_d['year'],\
-                                      t_d['month'] , t_d['day'],\
-                                      t_d['hour'],t_d['minute'],\
-                                      t_d['second'],t_d['microsecond'])
-            return self._file_start_time
+            from math import floor
+            assert type(new_time) is datetime
+            NewTimeDayStart = datetime(new_time.year,
+                                 new_time.month,
+                                 new_time.day)
+            FileStartDate = np.zeros(1, dtype = np.int32)
+            FileStartDate[:] = new_time.year * 10**4 + \
+                new_time.month * 10**2 +\
+                new_time.day
+            FileStartTime = np.zeros(1,np.int32)
+            Seconds = (new_time - NewTimeDayStart).total_seconds()
+            FileStartTime[:] = floor(Seconds)
+            FileStartMilli = np.zeros(1,np.int32)
+            FileStartMilli[:] = int((Seconds - floor(Seconds))*1000)
+            self.header['fid_size_info']['lFileStartDate'][0] = FileStartDate
+            self.header['fid_size_info']['lFileStartTime'][0] = FileStartTime
+            self.header['environment_inf']['nFileStartMillisecs'][0] = FileStartMilli
+            self.fid_w = file(self.path_file, 'r+b')
+            self.fid_w.seek(0)
+            self.fid_w.write(self.header)
+            self.fid_w.close()
+            del self.fid_w
+            try:
+                del self._file_start_time
+            except AttributeError:
+                pass
 
     def stop_watch_time(self):
         return int(self.header['fid_size_info']['lStopwatchTime'][0])
