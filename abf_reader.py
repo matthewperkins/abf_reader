@@ -293,7 +293,8 @@ class abf_reader(object):
         if 'bad_tele' in kwds.keys():
             assert type(kwds['bad_tele']) is bool, 'must be bool'
             self.bad_tele = kwds.pop('bad_tele')
-            
+            if self.bad_tele:
+                self._fix_bad_tele()
 
     def verify_version(self):
         FVerNum = self.header['fid_size_info']['fFileVersionNumber']
@@ -417,15 +418,10 @@ class abf_reader(object):
 
     def scale_int_data(self, data):
         for indx, chan in enumerate(self._read_seq()):
-            if self.bad_tele:
-                divis = (self.header['multi-chan_inf']['fInstrumentScaleFactor'][0][chan] * \
-                         self.header['multi-chan_inf']['fSignalGain'][0][chan] * \
-                         self.header['multi-chan_inf']['fADCProgrammableGain'][0][chan])
-            else:
-                divis = (self.header['multi-chan_inf']['fInstrumentScaleFactor'][0][chan] * \
-                         self.header['multi-chan_inf']['fSignalGain'][0][chan] * \
-                         self.header['multi-chan_inf']['fADCProgrammableGain'][0][chan] * \
-                         self.addGain[chan])
+            divis = (self.header['multi-chan_inf']['fInstrumentScaleFactor'][0][chan] * \
+                     self.header['multi-chan_inf']['fSignalGain'][0][chan] * \
+                     self.header['multi-chan_inf']['fADCProgrammableGain'][0][chan] * \
+                     self.addGain[chan])
             mult =  self.header['hardware_inf']['fADCRange'][0] \
                    / self.header['hardware_inf']['lADCResolution'][0]
             offs = self.header['multi-chan_inf']['fInstrumentOffset'][0][chan] - \
@@ -438,6 +434,16 @@ class abf_reader(object):
         self.addGain = self.header['ext_environment_inf']['nTelegraphEnable'][0] * \
             self.header['ext_environment_inf']['fTelegraphAdditGain'][0]
         self.addGain = np.where(self.addGain==0, 1, self.addGain)
+
+    def _fix_bad_tele(self):
+        '''hack to work around abf 1.8s created with clampfit10'''
+        self.fid_w = file(self.path_file, 'r+b')
+        self.fid_w.seek(0)
+        # just disable the telegraph gains by setting to zero
+        self.header['ext_environment_inf']['nTelegraphEnable'][0]*=0
+        self.fid_w.write(self.header)
+        self.fid_w.close()
+        del self.fid_w
 
     def get_synch_array(self):
         from abf_header_defs import ABF_BLOCKSIZE
