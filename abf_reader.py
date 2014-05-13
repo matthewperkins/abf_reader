@@ -280,8 +280,8 @@ class abf_reader(object):
         elif self.header['f_structure']['nDataFormat'][0]==0: #integer data
             self.base_size = 2 * self.num_chans() # 2byte size per int
 
-        # check file type
-        if self.header['fid_size_info']['nFileType'][0]==1:
+        # check operation type, continous is 3 episodic stimulation is 5 
+        if self.header['fid_size_info']['nOperationMode'][0]==5:
             self.DAC_0 = DAC(self.header, 0)
             self.DAC_1 = DAC(self.header, 1)
 
