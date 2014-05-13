@@ -13,6 +13,8 @@ def trace_axes(ax):
         spine.set_color('none') # don't draw spine
     setp(ax.get_xticklabels(), visible = False)
     setp(ax.get_yticklabels(), visible = False)
+    ax.xaxis.set_ticks([])
+    ax.yaxis.set_ticks([])
 
 class abf_chunker_plotter(object):
     def __init__(self, _abf_chunker):
@@ -177,6 +179,8 @@ class abf_chunker_plotter(object):
                         data = bwfiltfilt(data,
                                           self._abf_chunker.abr.sample_rate(),
                                           kwds['lp_filt'][cell_num])
+                    if np.any(np.isnan(data)):
+                        raise ValueError('data has NaNs, probably filter is bad')
                 if 'scale_bars' not in kwds.keys():
                     if type(kwds['plt_kwargs']) is list:
                         ax.plot(data, **kwds['plt_kwargs'][cell_num])
