@@ -139,6 +139,7 @@ class abf_chunker_plotter(object):
                             assert SclBarDict['correctdx'] is True
                         except (KeyError, AssertionError):
                             SclBarDict['sizex'] *= self._abf_chunker.abr.sample_rate()
+                            SclBarDict['xstep'] = 1/self._abf_chunker.abr.sample_rate()
                             SclBarDict['correctdx'] = True
                     # kludge need to pop this temp keyword off again                            
                     for SclBarDict in kwds['scale_bars']['cell']:
@@ -154,6 +155,7 @@ class abf_chunker_plotter(object):
                             assert SclBarDict['correctdx'] is True
                         except (KeyError, AssertionError):
                             SclBarDict['sizex'] *= self._abf_chunker.abr.sample_rate()
+                            SclBarDict['xstep'] = 1/self._abf_chunker.abr.sample_rate()
                             SclBarDict['correctdx'] = True
                     # kludge need to pop this temp keyword off again                            
                     for SclBarDict in kwds['scale_bars']['neurgrm']:

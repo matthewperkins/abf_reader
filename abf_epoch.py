@@ -1,6 +1,7 @@
 from abf_reader import *
 import matplotlib.pyplot as plt
 import warnings
+import numpy as np
 
 class epoch(object):
     def __init__(self, abf, DAC_num, epoch_num, **kwds):
@@ -70,7 +71,8 @@ class epoch(object):
 class waterfall(object):
     def __init__(self, abf_epoch,
                  channo = 0, xprcnt = 110, xoffset_sec = False,
-                 yoffset = 0, **kwds):
+                 yoffset = 0, selectd = False,
+                 **kwds):
         self.abf_epoch = abf_epoch
         self.channo = channo
         self.xprcnt = xprcnt
@@ -89,30 +91,31 @@ class waterfall(object):
             self.interstitial = 0
             self._fixd_offset = True
         self.xs = np.linspace(0, self.swp_len_sec, self.swp_len_dp)
+        if selectd is False:
+            self._swps = np.arange(self._num_swps)
+        else:
+            assert issubclass(type(selectd), np.ndarray), "selectd is type %s, should be np.ndarray" % type(selectd).__name__
+            assert len(selectd.shape)==1
+            self._swps = selectd
+        # just to not break things, too bad that is 
+        self.set_range = self.x_range
         super(waterfall, self).__init__(**kwds)
 
     def __iter__(self, **kwds):
         return self.gen_iter(**kwds)
 
-    def set_range(self, start = 0, stop = -1, step = 1):
-        stop = stop if stop>0 else self._num_swps
-        self._stop = stop
-        self._start = start
-        self._step = step
-        self._num_iter_sweeps =\
-            len(range(self._start, self._stop, self._step))
+    def x_range(self):
         if self._fixd_offset:
             self._xlim = (\
-                0, self._num_iter_sweeps * self.offset + self.swp_len_sec - self.offset)
+                0, len(self._swps) * self.offset + self.swp_len_sec - self.offset)
         else:
             self._xlim =\
-                (0, self._num_iter_sweeps * self.swp_len_sec +\
+                (0, len(self._swps) * self.swp_len_sec +\
                      (self.interstitial * self._num_iter_sweeps))
+        return self._xlim
 
     def gen_iter(self):
-        for i, swp_idx in enumerate(range(self._start,
-                                          self._stop,
-                                          self._step)):
+        for i, swp_idx in enumerate(self._swps):
             xs = self.xs + self.offset*i
             ys = self.abf_epoch._data(swp_idx)[:,self.channo] + self.yoffset*i
             lvl = self.abf_epoch._lvl(swp_idx)
@@ -130,6 +133,6 @@ if __name__=='__main__':
     abf = abf_reader(abfpath)
     epch = epoch(abf, 1, 1)
     epch.set_pading(left = 1000, right = 1000)
-    for xs,ys in waterfall(epch):
+    for xs,ys,lvl in waterfall(epch, selectd = np.r_[0:18:2]):
         plt.plot(xs,ys, '-k', linewidth = 0.5)
     plt.show()
