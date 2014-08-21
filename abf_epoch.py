@@ -111,7 +111,7 @@ class waterfall(object):
         else:
             self._xlim =\
                 (0, len(self._swps) * self.swp_len_sec +\
-                     (self.interstitial * self._num_iter_sweeps))
+                     (self.interstitial * len(self._swps)))
         return self._xlim
 
     def gen_iter(self):
