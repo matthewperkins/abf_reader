@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from signal_tools import bwfiltfilt
 from mp_scale_bars import AnchoredScaleBar, DraggableScaleBar
 import os
+import copy
 
 def trace_axes(ax):
     from matplotlib.pyplot import setp
@@ -131,10 +132,12 @@ class abf_chunker_plotter(object):
             gs_neurgrm.update(left = 0, right = 1,
                               top = nrgtop, bottom = nrgbtm, hspace = 0.05)
             if 'scale_bars' in kwds.keys():
+                # make a copy to avoid shitty side effects
+                sb = copy.deepcopy(kwds['scale_bars'])
                 dsbs = []
                 # need to adjust the x to data points here
                 try: 
-                    for SclBarDict in kwds['scale_bars']['cell']:
+                    for SclBarDict in sb['cell']:
                         try:
                             assert SclBarDict['correctdx'] is True
                         except (KeyError, AssertionError):
@@ -142,7 +145,7 @@ class abf_chunker_plotter(object):
                             SclBarDict['xstep'] = 1/self._abf_chunker.abr.sample_rate()
                             SclBarDict['correctdx'] = True
                     # kludge need to pop this temp keyword off again                            
-                    for SclBarDict in kwds['scale_bars']['cell']:
+                    for SclBarDict in sb['cell']:
                         try:
                             SclBarDict.pop('correctdx')
                         except KeyError:
@@ -150,7 +153,7 @@ class abf_chunker_plotter(object):
                 except KeyError:
                     pass
                 try:
-                    for SclBarDict in kwds['scale_bars']['neurgrm']:
+                    for SclBarDict in sb['neurgrm']:
                         try:
                             assert SclBarDict['correctdx'] is True
                         except (KeyError, AssertionError):
@@ -158,7 +161,7 @@ class abf_chunker_plotter(object):
                             SclBarDict['xstep'] = 1/self._abf_chunker.abr.sample_rate()
                             SclBarDict['correctdx'] = True
                     # kludge need to pop this temp keyword off again                            
-                    for SclBarDict in kwds['scale_bars']['neurgrm']:
+                    for SclBarDict in sb['neurgrm']:
                         try:
                             SclBarDict.pop('correctdx')
                         except KeyError:
@@ -191,12 +194,12 @@ class abf_chunker_plotter(object):
                 ax.set_ylim(self._ylim['cells'][cell_num])
                 ax.set_xlim((0,len(d)))
                 if 'scale_bars' in kwds.keys():
-                    sb = AnchoredScaleBar(plt.gca().transData, plt.gcf().dpi_scale_trans,
+                    ASB = AnchoredScaleBar(plt.gca().transData, plt.gcf().dpi_scale_trans,
                                           bbox_transform = plt.gca().transAxes,
-                                          **dict(kwds['scale_bars']['shared'].items()+
-                                               kwds['scale_bars']['cell'][cell_num].items()))
-                    ax.add_artist(sb)
-                    dsb = DraggableScaleBar(sb)
+                                          **dict(sb['shared'].items()+
+                                               sb['cell'][cell_num].items()))
+                    ax.add_artist(ASB)
+                    dsb = DraggableScaleBar(ASB)
                     dsb.connect()
                     dsbs.append(dsb)
             for neurgrm_num, neurgrm in enumerate(neurgrm_list):
@@ -212,12 +215,12 @@ class abf_chunker_plotter(object):
                 ax.set_ylim(self._ylim['neurgrms'][neurgrm_num])
                 ax.set_xlim((0,len(d)))
                 if 'scale_bars' in kwds.keys():
-                    sb = AnchoredScaleBar(plt.gca().transData, plt.gcf().dpi_scale_trans,
+                    ASB = AnchoredScaleBar(plt.gca().transData, plt.gcf().dpi_scale_trans,
                                           bbox_transform = plt.gca().transAxes,
-                                          **dict(kwds['scale_bars']['shared'].items()+
-                                               kwds['scale_bars']['neurgrm'][neurgrm_num].items()))
-                    ax.add_artist(sb)
-                    dsb = DraggableScaleBar(sb)
+                                          **dict(sb['shared'].items()+
+                                               sb['neurgrm'][neurgrm_num].items()))
+                    ax.add_artist(ASB)
+                    dsb = DraggableScaleBar(ASB)
                     dsb.connect()
                     dsbs.append(dsb)
             print(fig.get_size_inches())
@@ -243,7 +246,7 @@ class abf_chunker_plotter(object):
             del ax
             plt.close(fig)
             del fig
-
+            
         if self._abf_chunker.num_chunk_rows<1:
             image_name = "%s.%s" % (image_name, image_type)
             if os.path.exists(image_name):
