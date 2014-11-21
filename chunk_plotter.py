@@ -69,13 +69,6 @@ class abf_chunker_plotter(object):
         #                                   'labely' : '20 nA'}]*num_neurgrms}
         
 
-        # nested function for scalebars
-        def saveclose(event):
-            if event.key=='o' or 'O':
-                plt.gcf().set_size_inches(( self.indiv_fig_width * width_frct, self.indiv_fig_height))
-                plt.gcf().savefig(filname, dpi = dpi, transparent = True)
-                plt.close()
-
         # most of the plot will be for intracell
 
         # the ratio that cell signals will be bigger than neurogram signals
@@ -199,9 +192,6 @@ class abf_chunker_plotter(object):
                                           **dict(sb['shared'].items()+
                                                sb['cell'][cell_num].items()))
                     ax.add_artist(ASB)
-                    dsb = DraggableScaleBar(ASB)
-                    dsb.connect()
-                    dsbs.append(dsb)
             for neurgrm_num, neurgrm in enumerate(neurgrm_list):
                 data = d[:,neurgrm]
                 ax = plt.subplot(gs_neurgrm[neurgrm_num, 0])
@@ -220,17 +210,16 @@ class abf_chunker_plotter(object):
                                           **dict(sb['shared'].items()+
                                                sb['neurgrm'][neurgrm_num].items()))
                     ax.add_artist(ASB)
-                    dsb = DraggableScaleBar(ASB)
-                    dsb.connect()
-                    dsbs.append(dsb)
             print(fig.get_size_inches())
             del d
             filname = "%s_%03d.%s" % ('tmp', i, image_type)
             print(filname)
             if 'scale_bars' in kwds.keys():
                 scale_bar = kwds.pop('scale_bars')
-                plt.gcf().canvas.mpl_connect('key_press_event', saveclose)
-                plt.show()
+                plt.gcf().set_size_inches(( self.indiv_fig_width * width_frct,
+                                            self.indiv_fig_height))
+                plt.gcf().savefig(filname, dpi = dpi, transparent = True)
+                plt.close()
             else:
                 fig.set_size_inches(( self.indiv_fig_width * width_frct, self.indiv_fig_height))
                 if 'axisbg' in kwds.keys():
