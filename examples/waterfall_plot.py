@@ -68,10 +68,10 @@ def main(files_dict, ylim = (-60,30), sb_kwds = default_sb_prop):
     
 if __name__=='__main__':
     # make list of dicts like so:
-    files_dict = [{'abf':abf_reader('2012_08_24_0000.abf'),
+    files_dict = [{'abf':abf_reader('./2012_08_24_0000.abf'),
                    'color':'black',
                    'label':'control'},
-                  {'abf':abf_reader('2012_08_24_0004.abf'),
+                  {'abf':abf_reader('./2012_08_24_0004.abf'),
                    'color':'red',
                    'label':'frf'}]
     fig = main(files_dict)

@@ -47,3 +47,7 @@ test/*
 
 # images #
 *.png
+
+# axon files #
+*.atf
+*.abf
