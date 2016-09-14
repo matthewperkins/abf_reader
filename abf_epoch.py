@@ -7,7 +7,8 @@ class epoch(object):
     def __init__(self, abf, DAC_num, epoch_num, **kwds):
         self.abf = abf
         # convience variable for sample rate
-        self.sr = sample_rate(self.abf.header)
+        self.sr = abf.sample_rate()
+        self.xstep = abf.xstep()
         self.DAC_num = DAC_num
         self.epoch_num = epoch_num
         self._levels = make_epch_levels(abf.header, DAC_num)[:,epoch_num]
@@ -44,11 +45,15 @@ class epoch(object):
         for i, (strt, stop) in enumerate(self.padded_epch_indxs):
             assert strt!=stop, "Epoch Padding is BAD: Start Idx (%d) == Stop Idx (%d) at Sweep %d" % (strt, stop, i)
 
-    def _data(self, swp_idx):
+    def _data(self, swp_idx, leadin_dp=0, follow_dp=0):
         strt = self._swp_indxs[swp_idx,0] +\
                     self.padded_epch_indxs[swp_idx,0]
         stop = self._swp_indxs[swp_idx,0] +\
                     self.padded_epch_indxs[swp_idx,1]
+        assert leadin_dp>=0, "Lead in data points %d should be pos" % (leadin_dp)
+        assert follow_dp>=0, "Follow data points %d should be pos" % (leadin_dp)
+        strt-=int(leadin_dp)
+        stop+=int(follow_dp)
         if stop<strt:
             # if stop is before start, read and reverse
             warn_msg = "\n\nStart Epoch Idx (%d) is after Stop Epoch Idx (%d), for sweep (%d), data are time inverted\n\n" % (strt, stop, swp_idx)
@@ -67,7 +72,7 @@ class epoch(object):
         # using generator
         for swp_idx in range(self._num_swps):
             yield self._data(swp_idx)
-
+            
 class waterfall(object):
     def __init__(self, abf_epoch,
                  channo = 0, xprcnt = 110, xoffset_sec = False,
@@ -79,7 +84,8 @@ class waterfall(object):
         self.yoffset = yoffset
         self._num_swps = self.abf_epoch._num_swps
         self.swp_len_dp = len(abf_epoch.__iter__().next()[:,self.channo])
-        self.sr = sample_rate(abf_epoch.abf.header)
+        self.sr = abf_epoch.sr
+        self.xstep = abf_epoch.xstep
         self.swp_len_sec = self.swp_len_dp/self.sr
         if xprcnt is not False:
             self.offset = (self.swp_len_sec) * xprcnt/100.
@@ -118,6 +124,25 @@ class waterfall(object):
         for i, swp_idx in enumerate(self._swps):
             xs = self.xs + self.offset*i
             ys = self.abf_epoch._data(swp_idx)[:,self.channo] + self.yoffset*i
+            lvl = self.abf_epoch._lvl(swp_idx)
+            yield xs, ys, lvl
+        self.xlim = (0, max(xs))
+        
+class waterfall_int_current(waterfall):
+    def __init__(self, CurrentSpecifier, MsecLeadIn, *args, **kwds):
+        self.CurrentSpecifier = CurrentSpecifier
+        self.MsecLeadIn = MsecLeadIn
+        super(waterfall_int_current, self).__init__(*args, **kwds)
+
+    def gen_iter(self):
+        for i, swp_idx in enumerate(self._swps):
+            xs = self.xs + self.offset*i
+            # have to get the lead in here
+            lead_dp = int((self.MsecLeadIn / 1000.) * self.sr)
+            Vm = self.abf_epoch._data(swp_idx,leadin_dp=lead_dp)[:,self.channo] + self.yoffset*i
+            tarr = np.r_[0:len(Vm)/self.sr:self.xstep]
+            current = self.CurrentSpecifier(Vm, tarr)
+            ys = current[lead_dp:] + self.yoffset*i
             lvl = self.abf_epoch._lvl(swp_idx)
             yield xs, ys, lvl
         self.xlim = (0, max(xs))

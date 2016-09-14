@@ -254,7 +254,7 @@ class abf_reader(object):
         else:
             self.path = os.path.dirname(os.path.abspath(fname))
         self.path_file = self.path + os.sep + self.fname
-        self.fid = file(self.path_file, 'rb')
+        self.fid = open(self.path_file, 'rb')
         self.read_header()
 
         # make sure that I have a compatible abf version
@@ -286,7 +286,7 @@ class abf_reader(object):
             self.DAC_1 = DAC(self.header, 1)
 
         # for covience, make a protocol variable
-        self.protocol = self.header['ext_environment_inf']['sProtocolPath'][0].strip()
+        self.protocol = self.header['ext_environment_inf']['sProtocolPath'][0].rstrip()
 
         # to deal with bad
         self.bad_tele = False
@@ -323,15 +323,14 @@ class abf_reader(object):
 
     def __setstate__(self, dict):
         path_file = dict['path_file']
-        self.fid = file(path_file, 'rb')
+        self.fid = open(path_file, 'rb')
 
     def read_header(self):
         self.fid.seek(0)
         self.header = np.fromfile(self.fid, self._headr_struct, 1)
 
     def _read_seq(self):
-        return filter(lambda read: \
-            read != -1, self.header['multi-chan_inf']['nADCSamplingSeq'][0])
+        return [read for read in self.header['multi-chan_inf']['nADCSamplingSeq'][0] if read != -1]
 
     def next_chan(self):
         self._chan_holder += 1
@@ -361,9 +360,9 @@ class abf_reader(object):
         sampled_chans = self._read_seq()
         #these list of sampled chans is in the order it was sampled
         for num, sampled_chan in enumerate(sampled_chans):
-            print '%-3s' '%-3s' '%-8s' '%-10s' '%-10s' %(num, '-'*3,
+            print('%-3s' '%-3s' '%-8s' '%-10s' '%-10s' %(num, '-'*3,
                                                          adc_l[sampled_chan],
-                                                         '-'*8, chans[sampled_chan])
+                                                         '-'*8, chans[sampled_chan]))
 
     def chan_name(self, chan_no=0):
         chans = self.header['multi-chan_inf']['sADCChannelName'][0]
@@ -387,6 +386,16 @@ class abf_reader(object):
         # handle optional kwds, for subsetting data
         # start_row and needs to be transulated into byte offset
         # other kwds, num_rows or stop_row do not
+        if 'r_slice' in kwds.keys():
+            row_slice = kwds.pop('r_slice')
+            start_row = row_slice.start
+            offset += (start_row * self.base_size)
+            stop_row = row_slice.stop
+            # check if start_row is beginning
+            if offset!=self.hdr_offset:
+                nrows = stop_row - start_row
+            elif offset==self.hdr_offset:
+                nrows = stop_row
         if 'start_row' in kwds.keys():
             start_row = kwds.pop('start_row')
             offset += (start_row * self.base_size)
@@ -437,7 +446,7 @@ class abf_reader(object):
 
     def _fix_bad_tele(self):
         '''hack to work around abf 1.8s created with clampfit10'''
-        self.fid_w = file(self.path_file, 'r+b')
+        self.fid_w = open(self.path_file, 'r+b')
         self.fid_w.seek(0)
         # just disable the telegraph gains by setting to zero
         self.header['ext_environment_inf']['nTelegraphEnable'][0]*=0
@@ -470,6 +479,14 @@ class abf_reader(object):
           /self.header['trial_hierarchy']['nADCNumChannels']
           self._sample_rate = self._sample_rate[0]
           return self._sample_rate
+
+    def xstep(self):
+        try:
+            self._xstep
+            return self._xstep
+        except AttributeError:
+          # sample interval in microseconds, so hertz are * 10e6
+          return 1/self.sample_rate()
 
     def start_time(self, new_time = None):
         if new_time is None:
@@ -518,7 +535,7 @@ class abf_reader(object):
             self.header['fid_size_info']['lFileStartDate'][0] = FileStartDate
             self.header['fid_size_info']['lFileStartTime'][0] = FileStartTime
             self.header['environment_inf']['nFileStartMillisecs'][0] = FileStartMilli
-            self.fid_w = file(self.path_file, 'r+b')
+            self.fid_w = open(self.path_file, 'r+b')
             self.fid_w.seek(0)
             self.fid_w.write(self.header)
             self.fid_w.close()

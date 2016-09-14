@@ -14,6 +14,8 @@ class abf_chunker(object):
         self.nrows = self.dp/self.numchans
         if 'nominal_chunksize' in kwds:
             self._nominal_chunksize = kwds.pop('nominal_chunksize')
+        else:
+            self._nominal_chunksize = 2**27
 
         ###############
         # think like this:

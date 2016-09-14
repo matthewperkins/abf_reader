@@ -107,11 +107,11 @@ abf_header_dtype = np.dtype([\
         ('fCellID1' , np.float32),
         ('fCellID2' , np.float32),
         ('fCellID3' , np.float32),
-        ('sCreatorInfo',  np.str_, ABF_CREATORINFOLEN), # is cool for strings
-        ('_sFileComment', np.str_, ABF_OLDFILECOMMENTLEN),
+        ('sCreatorInfo',  np.dtype((bytes, ABF_CREATORINFOLEN))), # is cool for strings
+        ('_sFileComment', np.dtype((bytes, ABF_OLDFILECOMMENTLEN))),
         ('nFileStartMillisecs' , np.int16),
         ('nCommentsEnable' , np.int16),
-        ('sUnused003a', np.str_, 8)
+        ('sUnused003a', np.dtype((bytes, 8)))
         ]),
     ('multi-chan_inf',               ### size: 1044, offset: 378
        [\
@@ -133,7 +133,7 @@ abf_header_dtype = np.dtype([\
         ('fDACScaleFactor', np.float32, ABF_DACCOUNT),
         ('fDACHoldingLevel', np.float32, ABF_DACCOUNT),
         ('nSignalType', np.int16),
-        ('sUnused004', np.str_, 10)
+        ('sUnused004', np.dtype((bytes, 10)))
         ]),
     ('synch_timer_outs',             ### size: 14, offset: 1422
        [\
@@ -159,18 +159,18 @@ abf_header_dtype = np.dtype([\
         ('nDigitalHolding' , np.int16),
         ('nDigitalInterEpisode' , np.int16),
         ('nDigitalValue', np.int16, ABF_EPOCHCOUNT),
-        ('sUnavailable1608', np.str_, 4),
+        ('sUnavailable1608', np.dtype((bytes, 4))),
         ('nDigitalDACChannel' , np.int16),
-        ('sUnused005', np.str_, 6)
+        ('sUnused005', np.dtype((bytes, 6)))
         ]),
     ('DAC_output_file',              ### size: 98, offset: 1620
         [\
         ('_fDACFileScale' , np.float32),
         ('_fDACFileOffset' , np.float32),
-        ('sUnused006', np.str_, 2),
+        ('sUnused006', np.dtype((bytes, 2))),
         ('_nDACFileEpisodeNum' , np.int16),
         ('_nDACFileADCNum' , np.int16),
-        ('_sDACFilePath', np.str_, ABF_DACFILEPATHLEN)
+        ('_sDACFilePath', np.dtype((bytes, ABF_DACFILEPATHLEN)))
         ]),
     ('presweep_pulse_train',         ### size: 44, offset: 1718
        [\
@@ -183,12 +183,12 @@ abf_header_dtype = np.dtype([\
         ('_fStepLevel' , np.float32),
         ('_fPostTrainPeriod' , np.float32),
         ('_fPostTrainLevel' , np.float32),
-        ('sUnused007', np.str_, 12)
+        ('sUnused007', np.dtype((bytes, 12)))
         ]),
     ('variable_param_user_list',     ### size: 82, offset: 1762
        [\
         ('_nParamToVary' , np.int16),
-        ('_sParamValueList', np.str_, ABF_VARPARAMLISTLEN)
+        ('_sParamValueList', np.dtype((bytes, ABF_VARPARAMLISTLEN)))
         ]),
     ('autopeak_msr',                 ### size: 36, offset: 1844
        [\
@@ -201,7 +201,7 @@ abf_header_dtype = np.dtype([\
         ('_nAutopeakSmoothing' , np.int16),
         ('_nAutopeakBaseline' , np.int16),
         ('_nAutopeakAverage' , np.int16),
-        ('sUnavailable1866', np.str_, 2),
+        ('sUnavailable1866', np.dtype((bytes, 2))),
         (' _lAutopeakBaselineStart' , np.int32),
         (' _lAutopeakBaselineEnd' , np.int32),
         (' _lAutopeakMeasurements' , np.int32)
@@ -217,12 +217,12 @@ abf_header_dtype = np.dtype([\
         ('fArithmeticK2' , np.float32),
         ('fArithmeticK3' , np.float32),
         ('fArithmeticK4' , np.float32),
-        ('sArithmeticOperator', np.str_, ABF_ARITHMETICOPLEN),
-        ('sArithmeticUnits', np.str_, ABF_ARITHMETICUNITSLEN),
+        ('sArithmeticOperator', np.dtype((bytes, ABF_ARITHMETICOPLEN))),
+        ('sArithmeticUnits', np.dtype(bytes, ABF_ARITHMETICUNITSLEN)),
         ('fArithmeticK5' , np.float32),
         ('fArithmeticK6' , np.float32),
         ('nArithmeticExpression' , np.int16),
-        ('sUnused008', np.str_, 2)
+        ('sUnused008', np.dtype((bytes, 2)))
         ]),
      ('on-line_sub',                 ### size: 34, offset: 1932
        [\
@@ -234,7 +234,7 @@ abf_header_dtype = np.dtype([\
         ('_fPNHoldingLevel' , np.float32),
         ('fPNSettlingTime' , np.float32),
         ('fPNInterpulse' , np.float32),
-        ('sUnused009', np.str_, 12)
+        ('sUnused009', np.dtype((bytes, 12)))
         ]),
      ('unused_space',                ### size: 82, offset:1966
        [\
@@ -245,8 +245,8 @@ abf_header_dtype = np.dtype([\
         ('nLevelHysteresis' , np.int16),
         ('lTimeHysteresis' , np.int32),
         ('nAllowExternalTags' , np.int16),
-        ('nLowpassFilterType', np.str_, ABF_ADCCOUNT),
-        ('nHighpassFilterType', np.str_, ABF_ADCCOUNT),
+        ('nLowpassFilterType', np.dtype((bytes, ABF_ADCCOUNT))),
+        ('nHighpassFilterType', np.dtype((bytes, ABF_ADCCOUNT))),
         ('nAverageAlgorithm' , np.int16),
         ('fAverageWeighting' , np.float32),
         ('nUndoPromptStrategy' , np.int16),
@@ -261,13 +261,13 @@ abf_header_dtype = np.dtype([\
        [\
         ('lDACFilePtr', np.int32, ABF_WAVEFORMCOUNT),
         ('lDACFileNumEpisodes', np.int32, ABF_WAVEFORMCOUNT),
-        ('sUnused010', np.str_, 10)
+        ('sUnused010', np.dtype((bytes, 10)))
         ]),
      ('ext_multi-chan_inf',          ### size: 222, offset: 2074
        [\
         ('fDACCalibrationFactor', np.float32, ABF_DACCOUNT),
         ('fDACCalibrationOffset', np.float32, ABF_DACCOUNT),
-        ('sUnused011', np.str_, 30),
+        ('sUnused011', np.dtype((bytes, 30))),
         ('lEpochPulsePeriod', np.int32, (ABF_WAVEFORMCOUNT, ABF_EPOCHCOUNT)), ## 4 * 2 * 10 = 80 bytes
         ('lEpochPulseWidth' , np.int32, (ABF_WAVEFORMCOUNT, ABF_EPOCHCOUNT)), ## 4 * 2 * 10 = 80 bytes
         ]),
@@ -283,7 +283,7 @@ abf_header_dtype = np.dtype([\
         ('lEpochDurationInc', np.int32, (ABF_WAVEFORMCOUNT, ABF_EPOCHCOUNT)),
         ('nDigitalTrainValue', np.int16, ABF_EPOCHCOUNT), ## 2 * 10 = 20 bytes
         ('nDigitalTrainActiveLogic', np.int16),   ## 2 bytes
-        ('sUnused012', np.str_, 18)
+        ('sUnused012', np.dtype((bytes, 18)))
         ]),
     ('ext_DAC_output_file',          ### size: 552, offset: 2708
        [\
@@ -292,7 +292,7 @@ abf_header_dtype = np.dtype([\
         ('lDACFileEpisodeNum', np.int32, ABF_WAVEFORMCOUNT),
         ('nDACFileADCNum', np.int16, ABF_WAVEFORMCOUNT),
         ('sDACFilePath', ('|S' + str(ABF_PATHLEN),ABF_WAVEFORMCOUNT)),
-        ('sUnused013', np.str_, 12)
+        ('sUnused013', np.dtype((bytes, 12)))
         ]),
     ('ext_presweep_pulse_train',     ### size: 100, offset: 3260
        [\
@@ -304,7 +304,7 @@ abf_header_dtype = np.dtype([\
         ('fStepLevel', np.float32, ABF_WAVEFORMCOUNT),
         ('fPostTrainPeriod', np.float32, ABF_WAVEFORMCOUNT),
         ('fPostTrainLevel', np.float32, ABF_WAVEFORMCOUNT),
-        ('sUnused014', np.str_, 40)
+        ('sUnused014', np.dtype((bytes, 40)))
         ]),
     ('ext_variable_param_user_list', ### size: 1096, offset: 3360
        [\
@@ -312,7 +312,7 @@ abf_header_dtype = np.dtype([\
         ('nULParamToVary', np.int16, ABF_USERLISTCOUNT),
         ('sULParamValueList', ('|S' + str(ABF_USERLISTLEN),ABF_USERLISTCOUNT)),
         ('nULRepeat', np.int16, ABF_USERLISTCOUNT),
-        ('sUnused015', np.str_, 48)
+        ('sUnused015', np.dtype((bytes, 48)))
         ]),
     ('ext_on-line_sub',              ### size: 56, offset: 4456
                                      
@@ -321,7 +321,7 @@ abf_header_dtype = np.dtype([\
         ('nPNPolarity', np.int16, ABF_WAVEFORMCOUNT),
         ('nPNADCNum', np.int16, ABF_WAVEFORMCOUNT),
         ('fPNHoldingLevel', np.float32, ABF_WAVEFORMCOUNT),
-        ('sUnused016', np.str_, 36)
+        ('sUnused016', np.dtype((bytes, 36)))
         ]),
     ('ext_environment_inf',          ### size: 898, offset: 4512
        [\
@@ -333,10 +333,10 @@ abf_header_dtype = np.dtype([\
         ('nTelegraphMode', np.int16, ABF_ADCCOUNT),
         ('nManualTelegraphStrategy', np.int16, ABF_ADCCOUNT),
         ('nAutoAnalyseEnable', np.int16),
-        ('sAutoAnalysisMacroName', np.str_, ABF_MACRONAMELEN),
-        ('sProtocolPath', np.str_, ABF_PATHLEN),
-        ('sFileComment', np.str_, ABF_FILECOMMENTLEN),
-        ('sUnused017', np.str_, 128)
+        ('sAutoAnalysisMacroName', np.dtype((bytes, ABF_MACRONAMELEN))),
+        ('sProtocolPath', np.dtype((bytes, ABF_PATHLEN))),
+        ('sFileComment', np.dtype((bytes, ABF_FILECOMMENTLEN))),
+        ('sUnused017', np.dtype((bytes, 128)))
         ]),
     ('ext_stats_msr',                ### size: 388, offset: 5410
        [\
@@ -359,7 +359,7 @@ abf_header_dtype = np.dtype([\
         ('nDecayTopPercentile', np.int16, ABF_STATS_REGIONS),
         ('nStatsChannelPolarity', np.int16, ABF_ADCCOUNT),
         ('nStatsSearchMode', np.int16, ABF_STATS_REGIONS),
-        ('sUnused018', np.str_, 156)
+        ('sUnused018', np.dtype((bytes, 156)))
         ]),
     ('ext_app_ver_data',             ### size: 16, offset: 5798
        [\
@@ -367,25 +367,25 @@ abf_header_dtype = np.dtype([\
         ('nMinorVersion' , np.int16),
         ('nBugfixVersion' , np.int16),
         ('nBuildVersion' , np.int16),
-        ('sUnused019', np.str_, 8)
+        ('sUnused019', np.dtype((bytes, 8)))
         ]),
     ('ext_LTP_prot',                 ### size: 14, offset: 5814
        [\
         ('nLTPType' , np.int16),
         ('nLTPUsageOfDAC', np.int16, ABF_WAVEFORMCOUNT),
         ('nLTPPresynapticPulses', np.int16, ABF_WAVEFORMCOUNT),
-        ('sUnused020', np.str_, 4)
+        ('sUnused020', np.dtype((bytes, 4)))
         ]),
     ('ext_digiD_trig_out_flag',      ### size: 8, offset: 5828
        [\
         ('nDD132xTriggerOut' , np.int16),
-        ('sUnused021', np.str_, 6)
+        ('sUnused021', np.dtype((bytes, 6)))
         ]),
     ('ext_epoch_resis',              ### size: 40, offset: 5836
        [\
         ('sEpochResistanceSignalName', ('|S' + str(ABF_ADCNAMELEN),ABF_WAVEFORMCOUNT)),
         ('nEpochResistanceState', np.int16, ABF_WAVEFORMCOUNT),
-        ('sUnused022', np.str_, 16)
+        ('sUnused022', np.dtype((bytes, 16)))
         ]),
     ('ext_alt_episod_mode',          ### size: 58, offset: 5876
        [\
@@ -393,13 +393,13 @@ abf_header_dtype = np.dtype([\
         ('nAlternateDigitalValue', np.int16, ABF_EPOCHCOUNT),
         ('nAlternateDigitalTrainValue', np.int16, ABF_EPOCHCOUNT),
         ('nAlternateDigitalOutputState' , np.int16),
-        ('sUnused023', np.str_, 14)
+        ('sUnused023', np.dtype((bytes, 14)))
         ]),
     ('ext_post-procss',              ### size:80, offset:5934
        [\
         ('fPostProcessLowpassFilter', np.float32, ABF_ADCCOUNT),
-        ('nPostProcessLowpassFilterType', np.str_, ABF_ADCCOUNT)
+        ('nPostProcessLowpassFilterType', np.dtype((bytes, ABF_ADCCOUNT)))
         ]),
     ('ext_unused',                   ### size: 130, offset: 6014
-       [('sUnused2048', np.str_, 130)]) 
+       [('sUnused2048', np.dtype((bytes, 130)))]) 
 ])

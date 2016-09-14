@@ -10,7 +10,7 @@ import copy
 
 def trace_axes(ax):
     from matplotlib.pyplot import setp
-    for loc, spine in ax.spines.iteritems():
+    for loc, spine in ax.spines.items():
         spine.set_color('none') # don't draw spine
     setp(ax.get_xticklabels(), visible = False)
     setp(ax.get_yticklabels(), visible = False)
@@ -187,10 +187,10 @@ class abf_chunker_plotter(object):
                 ax.set_ylim(self._ylim['cells'][cell_num])
                 ax.set_xlim((0,len(d)))
                 if 'scale_bars' in kwds.keys():
-                    ASB = AnchoredScaleBar(plt.gca().transData, plt.gcf().dpi_scale_trans,
-                                          bbox_transform = plt.gca().transAxes,
-                                          **dict(sb['shared'].items()+
-                                               sb['cell'][cell_num].items()))
+                    ASB = AnchoredScaleBar(plt.gca().transData,
+                                           plt.gcf().dpi_scale_trans,
+                                           bbox_transform = plt.gca().transAxes,
+                                           **dict(sb['shared'], **sb['cell'][cell_num]))
                     ax.add_artist(ASB)
             for neurgrm_num, neurgrm in enumerate(neurgrm_list):
                 data = d[:,neurgrm]
@@ -205,10 +205,10 @@ class abf_chunker_plotter(object):
                 ax.set_ylim(self._ylim['neurgrms'][neurgrm_num])
                 ax.set_xlim((0,len(d)))
                 if 'scale_bars' in kwds.keys():
-                    ASB = AnchoredScaleBar(plt.gca().transData, plt.gcf().dpi_scale_trans,
-                                          bbox_transform = plt.gca().transAxes,
-                                          **dict(sb['shared'].items()+
-                                               sb['neurgrm'][neurgrm_num].items()))
+                    ASB = AnchoredScaleBar(plt.gca().transData,
+                                           plt.gcf().dpi_scale_trans,
+                                           bbox_transform = plt.gca().transAxes,
+                                           **dict(sb['shared'].items(),**sb['neurgrm'][neurgrm_num]))
                     ax.add_artist(ASB)
             print(fig.get_size_inches())
             del d
