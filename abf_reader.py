@@ -101,10 +101,8 @@ def get_epch_types(abf_header, DAC_num):
     return (epoch_types)
 
 def get_num_chans(abf_header):
-    read_chans =  filter(lambda read: \
-        read != -1, abf_header['multi-chan_inf']['nADCSamplingSeq'][0])
-    return len(read_chans)
-
+    return np.sum(abf_header['multi-chan_inf']['nADCSamplingSeq'][0]!=-1)
+    
 def get_total_aquired(abf_header):
     return (abf_header['fid_size_info']['lActualAcqLength'][0])
 
@@ -355,7 +353,7 @@ class abf_reader(object):
             return 'name not found'
 
     def chan_names(self):
-        adc_l = map(lambda read: 'adc_' + str(read), np.r_[0:16])
+        adc_l = ['adc_' + str(read) for read in np.r_[0:16]]
         chans = self.header['multi-chan_inf']['sADCChannelName'][0]
         sampled_chans = self._read_seq()
         #these list of sampled chans is in the order it was sampled

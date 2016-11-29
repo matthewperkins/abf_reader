@@ -92,7 +92,7 @@ def main(abf_path, **kwargs):
              'neurgrm_lms':[(-3,3)*0],
              'fig_sz':(10,8),
              'filetype':'png',
-             'nominal_chunksize':2**28}
+             'nominal_chunksize':2**22}
 
     for key in kwargs.keys():
         if key=='cells':
