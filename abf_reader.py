@@ -60,7 +60,7 @@ def get_dp_pad(abf_header):
     # FINALLY FIGURED OUT HOW THE PRE AND POST HOLDS ARE
     # DETERMINED, THEY ARE EPISODE LENGTH / 64 (MODULO DIV)
     # from the pclamp guide on LTP of all things
-    dp_one_side_pad = int(RowsPerEpsd) / int(64)
+    dp_one_side_pad = int(RowsPerEpsd) // int(64)
     return dp_one_side_pad
 
 def make_epch_levels(abf_header, DAC_num):
@@ -118,12 +118,12 @@ def sample_rate(header):
 def get_DAC_len(abf_header):
     tot_aq = get_total_aquired(abf_header)
     num_chns = get_num_chans(abf_header)
-    return ( tot_aq / num_chns )
+    return ( tot_aq // num_chns )
 
 def get_sweep_len(abf_header):
     DAC_ln = get_DAC_len(abf_header)
     num_epsds = get_num_episodes(abf_header)
-    return ( DAC_ln / num_epsds )
+    return ( DAC_ln // num_epsds )
 
 def get_epsd_len(abf_header):
     swp_ln = sweep_len(abf_header)
@@ -203,7 +203,7 @@ class DAC(object):
         self._epch_lvls = make_epch_levels(abf_header, DAC_num)
         self._DAC_num = DAC_num
         self._cap_pad_ms = cap_pad_ms
-        self._cap_pad_dp = int(cap_pad_ms/1000.*sample_rate(abf_header))
+        self._cap_pad_dp = int(cap_pad_ms//1000.*sample_rate(abf_header))
         super(DAC, self).__init__(**kwds)
 
         self._actv_epchs = find_actv_epchs(abf_header, DAC_num)
@@ -379,7 +379,7 @@ class abf_reader(object):
         total_aq = self.total_aq()
         numchans = self.num_chans()
         ncols = numchans
-        nrows = total_aq/numchans
+        nrows = total_aq//numchans
 
         # handle optional kwds, for subsetting data
         # start_row and needs to be transulated into byte offset
@@ -500,12 +500,12 @@ class abf_reader(object):
 
                 # 'lFileStartTime is in seconds. do some division for time
                 seconds_time = self.header['fid_size_info']['lFileStartTime'][0]
-                self._File_Time['hour'] = seconds_time/(60*60)
-                self._File_Time['minute'] = (seconds_time%(60*60))/60
+                self._File_Time['hour'] = seconds_time//(60*60)
+                self._File_Time['minute'] = (seconds_time%(60*60))//60
                 self._File_Time['second'] = (seconds_time%(60*60))%60
                 self._File_Time['microsecond'] = \
-                  self.header['environment_inf']['nFileStartMillisecs'][0]\
-                  * 1000
+                  int(self.header['environment_inf']['nFileStartMillisecs'][0]\
+                  * 1000)
 
                 #for reading self._File_Time = t_d
                 t_d = self._File_Time
