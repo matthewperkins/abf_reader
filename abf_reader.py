@@ -47,8 +47,7 @@ def make_range_array(abf_header, DAC_num):
     num_epsds = get_num_episodes(abf_header)
     actv_epchs = find_actv_epchs(abf_header, DAC_num)
     num_epchs = len(actv_epchs)
-    range_array = np.transpose(np.tile(np.c_[0:num_epsds],
-                                       (num_epchs,1)))
+    range_array = np.tile(np.c_[0:num_epsds],(1,num_epchs))
     return range_array
 
 def get_dp_pad(abf_header):

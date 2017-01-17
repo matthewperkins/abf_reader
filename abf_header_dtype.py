@@ -218,7 +218,7 @@ abf_header_dtype = np.dtype([\
         ('fArithmeticK3' , np.float32),
         ('fArithmeticK4' , np.float32),
         ('sArithmeticOperator', np.dtype((bytes, ABF_ARITHMETICOPLEN))),
-        ('sArithmeticUnits', np.dtype(bytes, ABF_ARITHMETICUNITSLEN)),
+        ('sArithmeticUnits', np.dtype((bytes, ABF_ARITHMETICUNITSLEN))),
         ('fArithmeticK5' , np.float32),
         ('fArithmeticK6' , np.float32),
         ('nArithmeticExpression' , np.int16),
