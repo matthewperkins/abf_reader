@@ -112,7 +112,9 @@ class abf_chunker_plotter(object):
         if 'plt_kwargs' not in kwds.keys():
             kwds['plt_kwargs'] = {'color':col,
                                   'linewidth':self.linethickness}
-        
+        else:
+            kwds['plt_kwargs']['color']=col
+            
         import subprocess
         tmp_files = []
         for i, d in enumerate(self._abf_chunker):
@@ -247,7 +249,9 @@ class abf_chunker_plotter(object):
 
         # the montage command should be same more or less always
         # montage -tile x1 -background transparent -mode Concatenate `ls *.png` out.png
-        montage_cmmnd = ['gm', 'montage','-tile','x1','-background','transparent','-mode','Concatenate']
+#        graphics magick is acting wonky        
+#        montage_cmmnd = ['gm', 'montage','-tile','x1','-background','transparent','-mode','Concatenate']
+        montage_cmmnd = ['magick', 'montage', '-density', "%s" % dpi, '-tile','x1','-background','transparent','-mode','Concatenate']
             
         # add the files to stitch
         montage_cmmnd.extend(tmp_files)

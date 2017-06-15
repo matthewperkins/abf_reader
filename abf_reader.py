@@ -339,17 +339,21 @@ class abf_reader(object):
         return len(self._read_seq())
 
     def get_chan_name(self, grep_str):
+        import re
         from re import compile as recomp
         prog = recomp(grep_str, flags = re.I)
+        has_name = []
+        self._chan_holder = -1
         try:
             while True:
                 chan_indx = self.next_chan()
                 chan_name = self.chan_name(chan_indx)
                 result = prog.search(chan_name)
                 if (result):
-                    return chan_indx
+                    has_name.append(chan_indx)
         except StopIteration:
-            return 'name not found'
+            self._chan_holder = -1
+            return has_name
 
     def chan_names(self):
         adc_l = ['adc_' + str(read) for read in np.r_[0:16]]
@@ -383,6 +387,12 @@ class abf_reader(object):
         # handle optional kwds, for subsetting data
         # start_row and needs to be transulated into byte offset
         # other kwds, num_rows or stop_row do not
+        if 'start_time' in kwds.keys():
+            start_time = kwds.pop('start_time')
+            kwds['start_row'] = int(start_time * self.sample_rate())
+        if 'stop_time' in kwds.keys():
+            stop_time = kwds.pop('stop_time')
+            kwds['stop_row'] = int(stop_time * self.sample_rate())
         if 'r_slice' in kwds.keys():
             row_slice = kwds.pop('r_slice')
             start_row = row_slice.start
